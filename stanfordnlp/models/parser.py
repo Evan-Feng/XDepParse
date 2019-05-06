@@ -36,6 +36,9 @@ def parse_args():
     parser.add_argument('--output_file', type=str, default=None, help='Output CoNLL-U file.')
     parser.add_argument('--gold_file', type=str, default=None, help='Output CoNLL-U file.')
 
+    # additional arguments
+    parser.add_argument('--vocab_cutoff', type=int, default=7, help='Word frequency threshold for vocab construction')
+
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
     parser.add_argument('--shorthand', type=str, help="Treebank shorthand")
@@ -112,7 +115,7 @@ def train(args):
 
     # load data
     print("Loading data with batch size {}...".format(args['batch_size']))
-    train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain, evaluation=False)
+    train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain, evaluation=False, cutoff=args['vocab_cutoff'])
     vocab = train_batch.vocab
     train_dev_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain, vocab=vocab, evaluation=True)
     dev_batch = DataLoader(args['eval_file'], args['batch_size'], args, pretrain, vocab=vocab, evaluation=True)

@@ -11,11 +11,14 @@ from stanfordnlp.pipeline.doc import Document
 
 class DataLoader:
 
-    def __init__(self, input_src, batch_size, args, pretrain, vocab=None, evaluation=False):
+    def __init__(self, input_src, batch_size, args, pretrain, vocab=None, evaluation=False, cutoff=7):
         self.batch_size = batch_size
         self.args = args
         self.eval = evaluation
         self.shuffled = not self.eval
+
+        # added
+        self.cutoff = cutoff
 
         # check if input source is a file or a Document object
         if isinstance(input_src, str):
@@ -54,7 +57,7 @@ class DataLoader:
     def init_vocab(self, data):
         assert self.eval == False # for eval vocab must exist
         charvocab = CharVocab(data, self.args['shorthand'])
-        wordvocab = WordVocab(data, self.args['shorthand'], cutoff=7, lower=True)
+        wordvocab = WordVocab(data, self.args['shorthand'], cutoff=self.cutoff, lower=True)
         uposvocab = WordVocab(data, self.args['shorthand'], idx=1)
         xposvocab = xpos_vocab_factory(data, self.args['shorthand'])
         featsvocab = FeatureVocab(data, self.args['shorthand'], idx=3)
