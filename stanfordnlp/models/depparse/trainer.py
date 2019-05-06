@@ -12,6 +12,7 @@ from stanfordnlp.models.common.chuliu_edmonds import chuliu_edmonds_one_root
 from stanfordnlp.models.depparse.model import Parser
 from stanfordnlp.models.pos.vocab import MultiVocab
 
+
 def unpack_batch(batch, use_cuda):
     """ Unpack a batch from the data loader. """
     if use_cuda:
@@ -24,9 +25,11 @@ def unpack_batch(batch, use_cuda):
     wordlens = batch[14]
     return inputs, orig_idx, word_orig_idx, sentlens, wordlens
 
+
 class Trainer(BaseTrainer):
     """ A trainer for training models. """
-    def __init__(self, args=None, vocab=None, pretrain=None, model_file=None, use_cuda=False):
+
+    def __init__(self, args=None, vocab=None, pretrain=None, model_file=None, use_cuda=False, weight_decay=0):
         self.use_cuda = use_cuda
         if model_file is not None:
             # load everything from file
@@ -42,7 +45,8 @@ class Trainer(BaseTrainer):
             self.model.cuda()
         else:
             self.model.cpu()
-        self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'], betas=(0.9, self.args['beta2']), eps=1e-6)
+        self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
+                                             betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
 
     def update(self, batch, eval=False):
         inputs, orig_idx, word_orig_idx, sentlens, wordlens = unpack_batch(batch, self.use_cuda)
@@ -70,10 +74,10 @@ class Trainer(BaseTrainer):
         self.model.eval()
         batch_size = word.size(0)
         _, preds = self.model(word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, head, deprel, word_orig_idx, sentlens, wordlens)
-        head_seqs = [chuliu_edmonds_one_root(adj[:l, :l])[1:] for adj, l in zip(preds[0], sentlens)] # remove attachment for the root
-        deprel_seqs = [self.vocab['deprel'].unmap([preds[1][i][j+1][h] for j, h in enumerate(hs)]) for i, hs in enumerate(head_seqs)]
+        head_seqs = [chuliu_edmonds_one_root(adj[:l, :l])[1:] for adj, l in zip(preds[0], sentlens)]  # remove attachment for the root
+        deprel_seqs = [self.vocab['deprel'].unmap([preds[1][i][j + 1][h] for j, h in enumerate(hs)]) for i, hs in enumerate(head_seqs)]
 
-        pred_tokens = [[[str(head_seqs[i][j]), deprel_seqs[i][j]] for j in range(sentlens[i]-1)] for i in range(batch_size)]
+        pred_tokens = [[[str(head_seqs[i][j]), deprel_seqs[i][j]] for j in range(sentlens[i] - 1)] for i in range(batch_size)]
         if unsort:
             pred_tokens = utils.unsort(pred_tokens, orig_idx)
         return pred_tokens
@@ -86,10 +90,10 @@ class Trainer(BaseTrainer):
             for k in skipped:
                 del model_state[k]
         params = {
-                'model': model_state,
-                'vocab': self.vocab.state_dict(),
-                'config': self.args
-                }
+            'model': model_state,
+            'vocab': self.vocab.state_dict(),
+            'config': self.args
+        }
         try:
             torch.save(params, filename)
             print("model saved to {}".format(filename))
@@ -106,4 +110,3 @@ class Trainer(BaseTrainer):
         self.vocab = MultiVocab.load_state_dict(checkpoint['vocab'])
         self.model = Parser(self.args, self.vocab, emb_matrix=pretrain.emb)
         self.model.load_state_dict(checkpoint['model'], strict=False)
-

@@ -39,6 +39,7 @@ def parse_args():
     # additional arguments
     parser.add_argument('--vocab_cutoff', type=int, default=7, help='Word frequency threshold for vocab construction')
     parser.add_argument('--lemma_emb_dim', type=int, default=75)
+    parser.add_argument('--wdecay', type=float, default=1e-6, help='weight decay applied to all weights')
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
@@ -131,7 +132,7 @@ def train(args):
         sys.exit(0)
 
     print("Training parser...")
-    trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'])
+    trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'], weight_decay=args['wdecay'])
 
     global_step = 0
     max_steps = args['max_steps']

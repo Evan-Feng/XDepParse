@@ -54,15 +54,15 @@ def harmonic_mean(a, weights=None):
             return sum(weights) / sum(w/x for x, w in zip(a, weights))
 
 # torch utils
-def get_optimizer(name, parameters, lr, betas=(0.9, 0.999), eps=1e-8):
+def get_optimizer(name, parameters, lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=0):
     if name == 'sgd':
-        return torch.optim.SGD(parameters, lr=lr)
+        return torch.optim.SGD(parameters, lr=lr, weight_decay=weight_decay)
     elif name == 'adagrad':
-        return torch.optim.Adagrad(parameters, lr=lr)
+        return torch.optim.Adagrad(parameters, lr=lr, weight_decay=weight_decay)
     elif name == 'adam':
-        return torch.optim.Adam(parameters, lr=lr, betas=betas, eps=eps)
+        return torch.optim.Adam(parameters, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
     elif name == 'adamax':
-        return torch.optim.Adamax(parameters) # use default lr
+        return torch.optim.Adamax(parameters, weight_decay=weight_decay) # use default lr
     else:
         raise Exception("Unsupported optimizer: {}".format(name))
 
