@@ -144,6 +144,7 @@ def train(args):
     using_amsgrad = False
     last_best_step = 0
     # start training
+    log_loss = 0
     train_loss = 0
     while True:
         do_break = False
@@ -151,11 +152,13 @@ def train(args):
             start_time = time.time()
             global_step += 1
             loss = trainer.update(batch, eval=False)  # update step
+            log_loss += loss
             train_loss += loss
             if global_step % args['log_step'] == 0:
                 duration = time.time() - start_time
                 print(format_str.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), global_step,
-                                        max_steps, loss, duration, current_lr))
+                                        max_steps, log_loss / args['log_step'], duration, current_lr))
+                log_loss = 0
 
             if global_step % args['eval_interval'] == 0:
                 # eval on train
