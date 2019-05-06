@@ -26,6 +26,7 @@ from stanfordnlp.models.depparse import scorer
 from stanfordnlp.models.common import utils
 from stanfordnlp.models.common.pretrain import Pretrain
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='data/depparse', help='Root dir for saving models.')
@@ -78,6 +79,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+
 def main():
     args = parse_args()
 
@@ -97,10 +99,11 @@ def main():
     else:
         evaluate(args)
 
+
 def train(args):
     utils.ensure_dir(args['save_dir'])
     model_file = args['save_dir'] + '/' + args['save_name'] if args['save_name'] is not None \
-            else '{}/{}_parser.pt'.format(args['save_dir'], args['shorthand'])
+        else '{}/{}_parser.pt'.format(args['save_dir'], args['shorthand'])
 
     # load pretrained vectors
     vec_file = utils.get_wordvec_file(args['wordvec_dir'], args['shorthand'])
@@ -111,6 +114,7 @@ def train(args):
     print("Loading data with batch size {}...".format(args['batch_size']))
     train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain, evaluation=False)
     vocab = train_batch.vocab
+    train_dev_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain, vocab=vocab, evaluation=True)
     dev_batch = DataLoader(args['eval_file'], args['batch_size'], args, pretrain, vocab=vocab, evaluation=True)
 
     # pred and gold path
@@ -142,14 +146,24 @@ def train(args):
         for i, batch in enumerate(train_batch):
             start_time = time.time()
             global_step += 1
-            loss = trainer.update(batch, eval=False) # update step
+            loss = trainer.update(batch, eval=False)  # update step
             train_loss += loss
             if global_step % args['log_step'] == 0:
                 duration = time.time() - start_time
-                print(format_str.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), global_step,\
-                        max_steps, loss, duration, current_lr))
+                print(format_str.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), global_step,
+                                        max_steps, loss, duration, current_lr))
 
             if global_step % args['eval_interval'] == 0:
+                # eval on train
+                train_preds = []
+                for batch in train_dev_batch:
+                    preds = trainer.predict(batch)
+                    train_preds += preds
+
+                train_dev_batch.conll.set(['head', 'deprel'], [y for x in train_preds for y in x])
+                train_dev_batch.conll.write_conll(system_pred_file)
+                _, _, train_score = scorer.score(system_pred_file, args['train_file'])
+
                 # eval on dev
                 print("Evaluating on dev set...")
                 dev_preds = []
@@ -161,8 +175,8 @@ def train(args):
                 dev_batch.conll.write_conll(system_pred_file)
                 _, _, dev_score = scorer.score(system_pred_file, gold_file)
 
-                train_loss = train_loss / args['eval_interval'] # avg loss per batch
-                print("step {}: train_loss = {:.6f}, dev_score = {:.4f}".format(global_step, train_loss, dev_score))
+                train_loss = train_loss / args['eval_interval']  # avg loss per batch
+                print("step {}: train_loss = {:.6f}, train_score = {:.4f}, dev_score = {:.4f}".format(global_step, train_loss, train_score, dev_score))
                 train_loss = 0
 
                 # save best model
@@ -189,23 +203,25 @@ def train(args):
                 do_break = True
                 break
 
-        if do_break: break
+        if do_break:
+            break
 
         train_batch.reshuffle()
 
     print("Training ended with {} steps.".format(global_step))
 
-    best_f, best_eval = max(dev_score_history)*100, np.argmax(dev_score_history)+1
+    best_f, best_eval = max(dev_score_history) * 100, np.argmax(dev_score_history) + 1
     print("Best dev F1 = {:.2f}, at iteration = {}".format(best_f, best_eval * args['eval_interval']))
+
 
 def evaluate(args):
     # file paths
     system_pred_file = args['output_file']
     gold_file = args['gold_file']
     model_file = args['save_dir'] + '/' + args['save_name'] if args['save_name'] is not None \
-            else '{}/{}_parser.pt'.format(args['save_dir'], args['shorthand'])
+        else '{}/{}_parser.pt'.format(args['save_dir'], args['shorthand'])
     pretrain_file = '{}/{}.pretrain.pt'.format(args['save_dir'], args['shorthand'])
-    
+
     # load pretrain
     pretrain = Pretrain(pretrain_file)
 
@@ -240,7 +256,7 @@ def evaluate(args):
         _, _, score = scorer.score(system_pred_file, gold_file)
 
         print("Parser score:")
-        print("{} {:.2f}".format(args['shorthand'], score*100))
+        print("{} {:.2f}".format(args['shorthand'], score * 100))
 
 if __name__ == '__main__':
     main()
