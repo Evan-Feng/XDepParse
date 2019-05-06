@@ -96,6 +96,10 @@ def main():
     elif args.cuda:
         torch.cuda.manual_seed(args.seed)
 
+    print('Configuration:')
+    print('\n'.join('\t{:35} {}'.format(k + ':', str(v)) for k, v in sorted(dict(vars(args)).items())))
+    print()
+
     args = vars(args)
     print("Running parser in {} mode".format(args['mode']))
 
