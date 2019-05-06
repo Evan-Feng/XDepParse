@@ -28,8 +28,11 @@ class Parser(nn.Module):
         if self.args['word_emb_dim'] > 0:
             # frequent word embeddings
             self.word_emb = nn.Embedding(len(vocab['word']), self.args['word_emb_dim'], padding_idx=0)
-            self.lemma_emb = nn.Embedding(len(vocab['lemma']), self.args['word_emb_dim'], padding_idx=0)
-            input_size += self.args['word_emb_dim'] * 2
+            input_size += self.args['word_emb_dim']
+
+        if self.args['lemma_emb_dim'] > 0:
+            self.lemma_emb = nn.Embedding(len(vocab['lemma']), self.args['lemma_emb_dim'], padding_idx=0)
+            input_size += self.args['lemma_emb_dim']
 
         if self.args['tag_emb_dim'] > 0:
             self.upos_emb = nn.Embedding(len(vocab['upos']), self.args['tag_emb_dim'], padding_idx=0)
@@ -97,9 +100,12 @@ class Parser(nn.Module):
         if self.args['word_emb_dim'] > 0:
             word_emb = self.word_emb(word)
             word_emb = pack(word_emb)
+            inputs += [word_emb]
+
+        if self.args['lemma_emb_dim'] > 0:
             lemma_emb = self.lemma_emb(lemma)
             lemma_emb = pack(lemma_emb)
-            inputs += [word_emb, lemma_emb]
+            inputs += [lemma_emb]
 
         if self.args['tag_emb_dim'] > 0:
             pos_emb = self.upos_emb(upos)
