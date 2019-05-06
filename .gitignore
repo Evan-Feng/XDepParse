@@ -1,3 +1,7 @@
+*.out
+stanfordnlp.egg-info/
+extern_data/
+
 __pycache__/
 *.py[cod]
 *$py.class
