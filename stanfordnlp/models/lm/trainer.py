@@ -60,12 +60,6 @@ class Trainer(BaseTrainer):
         loss, preds = self.model(word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, next_word, prev_word, word_orig_idx, sentlens, wordlens)
         loss_val = loss.data.item()
 
-        # print(preds[0].shape)
-        # sent = preds[0][0].argmax(-1)
-        # print('='*100)
-        # print(' '.join([self.vocab['word'].id2unit(t) for t in word[0]]))
-        # print(' '.join([self.vocab['word'].id2unit(t) for t in sent]))
-
         if eval:
             return loss_val
 
@@ -73,6 +67,19 @@ class Trainer(BaseTrainer):
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args['max_grad_norm'])
         self.optimizer.step()
         return loss_val
+
+    def predict(self, batch, l_sample:int=10):
+        inputs, orig_idx, word_orig_idx, sentlens, wordlens = unpack_batch(batch, self.use_cuda)
+        word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, next_word, prev_word = inputs
+
+        self.model.eval()
+        bs = word.size(0)
+        _, preds = self.model(word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, next_word, prev_word, word_orig_idx, sentlens, wordlens)
+        preds = preds[0].argmax(-1)  # use forward predictions only
+        pred_tokens = []
+        for i in range(bs):
+            pred_tokens.append([word[i, 0]] + preds[i][:sentlens[i]].tolist())
+        return pred_tokens
 
     def save(self, filename, skip_modules=True):
         model_state = self.model.state_dict()
@@ -100,5 +107,5 @@ class Trainer(BaseTrainer):
             sys.exit(1)
         self.args = checkpoint['config']
         self.vocab = MultiVocab.load_state_dict(checkpoint['vocab'])
-        self.model = Parser(self.args, self.vocab, emb_matrix=pretrain.emb)
+        self.model = HLSTMLanguageModel(self.args, self.vocab, emb_matrix=pretrain.emb)
         self.model.load_state_dict(checkpoint['model'], strict=False)
