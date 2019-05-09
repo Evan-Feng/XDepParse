@@ -11,6 +11,7 @@ from stanfordnlp.models.common import utils, loss
 from stanfordnlp.models.common.chuliu_edmonds import chuliu_edmonds_one_root
 from stanfordnlp.models.depparse.model import Parser
 from stanfordnlp.models.pos.vocab import MultiVocab
+from stanfordnlp.models.common.rnn_utils import copy_rnn_weights
 
 
 def unpack_batch(batch, use_cuda):
@@ -81,6 +82,39 @@ class Trainer(BaseTrainer):
         if unsort:
             pred_tokens = utils.unsort(pred_tokens, orig_idx)
         return pred_tokens
+
+    def init_from_lm(self, lm_model, freeze:bool=False):
+        def freeze_net(net):
+            for p in net.parameters():
+                p.requires_grad = False
+
+        param_list = ['word_emb', 'lemma_emb', 'upos_emb', 'xpos_emb',
+                      'ufeats_emb', 'charmodel', 'trans_char', 'trans_char',
+                      'trans_pretrained']
+        lstm_params = ['parserlstm', 'lstm_forward', 'lstm_backward']
+
+        for p_name in param_list:
+            if hasattr(self.model, p_name):
+                print('Initilizing {} from pretrained lm'.format(p_name))
+                if not hasattr(lm_model, p_name):
+                    raise ValueError('lm model does not have attribute {}'.format(p_name))
+                module = getattr(lm_model, p_name)
+                setattr(self.model, p_name, module)
+                if freeze:
+                    freeze_net(module)
+            else:
+                print('Module not found, skipping {}'.format(p_name))
+
+        for p_name in lstm_params:
+            if hasattr(self.model, p_name):
+                print('Initilizing {} from pretrained lm'.format(p_name))
+                if not hasattr(lm_model, p_name):
+                    raise ValueError('lm model does not have attribute {}'.format(p_name))
+                copy_rnn_weights(getattr(lm_model, p_name), getattr(self.model, p_name))
+                if freeze:
+                    freeze_net(getattr(self.model, p_name))
+            else:
+                print('Module not found, skipping {}'.format(p_name))
 
     def save(self, filename, skip_modules=True):
         model_state = self.model.state_dict()
