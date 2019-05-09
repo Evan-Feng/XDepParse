@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class PairwiseBilinear(nn.Module):
     ''' A bilinear module that deals with broadcasting for efficient memory usage.
     Input: tensors of sizes (N x L1 x D1) and (N x L2 x D2)
     Output: tensor of size (N x L1 x L2 x O)'''
+
     def __init__(self, input1_size, input2_size, output_size, bias=True):
         super().__init__()
 
@@ -32,7 +34,9 @@ class PairwiseBilinear(nn.Module):
 
         return output
 
+
 class BiaffineScorer(nn.Module):
+
     def __init__(self, input1_size, input2_size, output_size):
         super().__init__()
         self.W_bilin = nn.Bilinear(input1_size + 1, input2_size + 1, output_size)
@@ -41,11 +45,13 @@ class BiaffineScorer(nn.Module):
         self.W_bilin.bias.data.zero_()
 
     def forward(self, input1, input2):
-        input1 = torch.cat([input1, input1.new_ones(*input1.size()[:-1], 1)], len(input1.size())-1)
-        input2 = torch.cat([input2, input2.new_ones(*input2.size()[:-1], 1)], len(input2.size())-1)
+        input1 = torch.cat([input1, input1.new_ones(*input1.size()[:-1], 1)], len(input1.size()) - 1)
+        input2 = torch.cat([input2, input2.new_ones(*input2.size()[:-1], 1)], len(input2.size()) - 1)
         return self.W_bilin(input1, input2)
 
+
 class PairwiseBiaffineScorer(nn.Module):
+
     def __init__(self, input1_size, input2_size, output_size):
         super().__init__()
         self.W_bilin = PairwiseBilinear(input1_size + 1, input2_size + 1, output_size)
@@ -54,11 +60,13 @@ class PairwiseBiaffineScorer(nn.Module):
         self.W_bilin.bias.data.zero_()
 
     def forward(self, input1, input2):
-        input1 = torch.cat([input1, input1.new_ones(*input1.size()[:-1], 1)], len(input1.size())-1)
-        input2 = torch.cat([input2, input2.new_ones(*input2.size()[:-1], 1)], len(input2.size())-1)
+        input1 = torch.cat([input1, input1.new_ones(*input1.size()[:-1], 1)], len(input1.size()) - 1)
+        input2 = torch.cat([input2, input2.new_ones(*input2.size()[:-1], 1)], len(input2.size()) - 1)
         return self.W_bilin(input1, input2)
 
+
 class DeepBiaffineScorer(nn.Module):
+
     def __init__(self, input1_size, input2_size, hidden_size, output_size, hidden_func=F.relu, dropout=0, pairwise=True):
         super().__init__()
         self.W1 = nn.Linear(input1_size, hidden_size)
@@ -73,8 +81,34 @@ class DeepBiaffineScorer(nn.Module):
     def forward(self, input1, input2):
         return self.scorer(self.dropout(self.hidden_func(self.W1(input1))), self.dropout(self.hidden_func(self.W2(input2))))
 
+
+class MLPScorer(nn.Module):
+
+    def __init__(self, input1_size, input2_size, hidden_size, output_size, num_layers=2, dropout=0.1):
+        super().__init__()
+        assert num_layers >= 1
+
+        self.net = nn.Sequential()
+        in_dim = input1_size + input2_size
+        out_dim = hidden_size if num_layers >= 2 else output_size
+        self.net.add_module('q-linear-0', nn.Linear(in_dim, out_dim))
+        for i in range(1, num_layers):
+            self.net.add_module('q-relu-{}'.format(i), nn.ReLU())
+            if dropout > 0:
+                self.net.add_module('q-dropout-{}'.format(i), nn.Dropout(dropout))
+            odim = output_size if i == num_layers - 1 else hidden_size
+            self.net.add_module('q-linear-{}'.format(i), nn.Linear(hidden_size, odim))
+
+    def forward(self, input1, input2):
+        l1 = input1.size(1)
+        l2 = input2.size(1)
+        r1, r2 = torch.meshgrid(torch.arange(l1), torch.arange(l2))
+        concat = torch.cat([input1[:, r1, :], input2[:, r2, :]], -1)
+        return self.net(concat)
+
+
 if __name__ == "__main__":
-    x1 = torch.randn(3,4)
-    x2 = torch.randn(3,5)
+    x1 = torch.randn(3, 4)
+    x2 = torch.randn(3, 5)
     scorer = DeepBiaffineScorer(4, 5, 6, 7)
     print(scorer(x1, x2))
