@@ -20,6 +20,7 @@ import random
 import torch
 from torch import nn, optim
 
+from stanfordnlp.models.lm.trainer import Trainer as LMTrainer
 from stanfordnlp.models.depparse.data import DataLoader
 from stanfordnlp.models.depparse.trainer import Trainer
 from stanfordnlp.models.depparse import scorer
@@ -41,7 +42,8 @@ def parse_args():
     parser.add_argument('--lemma_emb_dim', type=int, default=75)
     parser.add_argument('--wdecay', type=float, default=1e-6, help='weight decay applied to all weights')
     parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm', 'bihlstm'], help="LSTM type")
-
+    parser.add_argument('--pretrain_lm', type=str, default=None, help='dir of the pretrained lm (optional)')
+    parser.add_argument('--finetune', action='store_true', help='finetune all pretrained parameters')
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
@@ -50,7 +52,7 @@ def parse_args():
     parser.add_argument('--hidden_dim', type=int, default=400)
     parser.add_argument('--char_hidden_dim', type=int, default=400)
     parser.add_argument('--deep_biaff_hidden_dim', type=int, default=400)
-    parser.add_argument('--composite_deep_biaff_hidden_dim', type=int, default=100)
+    # parser.add_argument('--composite_deep_biaff_hidden_dim', type=int, default=100)
     parser.add_argument('--word_emb_dim', type=int, default=75)
     parser.add_argument('--char_emb_dim', type=int, default=100)
     parser.add_argument('--tag_emb_dim', type=int, default=50)
@@ -116,14 +118,31 @@ def train(args):
     model_file = args['save_dir'] + '/' + args['save_name'] if args['save_name'] is not None \
         else '{}/{}_parser.pt'.format(args['save_dir'], args['shorthand'])
 
-    # load pretrained vectors
-    vec_file = utils.get_wordvec_file(args['wordvec_dir'], args['shorthand'])
-    pretrain_file = '{}/{}.pretrain.pt'.format(args['save_dir'], args['shorthand'])
-    pretrain = Pretrain(pretrain_file, vec_file)
+    # load pretrained language model (optional)
+    if args['pretrain_lm'] is not None:
+        lm_file = os.path.join(args['pretrain_lm'], 'zh_gsd_lm.pt')
+        pretrain_file = os.path.join(args['pretrain_lm'], 'zh_gsd.pretrain.pt')
+        pretrain = Pretrain(pretrain_file)
+        use_cuda = args['cuda'] and not args['cpu']
+        lm_trainer = LMTrainer(pretrain=pretrain, model_file=lm_file, use_cuda=use_cuda)
+        lm_model = lm_trainer.model
+        loaded_args, vocab = lm_trainer.args, lm_trainer.vocab
+        train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain,
+                                 vocab=None, evaluation=False, cutoff=args['vocab_cutoff'])
+        vocab['deprel'] = train_batch.vocab['deprel']
+        train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain,
+                                 vocab=vocab, evaluation=False, cutoff=args['vocab_cutoff'])
+    else:
+        # load pretrained vectors
+        vec_file = utils.get_wordvec_file(args['wordvec_dir'], args['shorthand'])
+        pretrain_file = '{}/{}.pretrain.pt'.format(args['save_dir'], args['shorthand'])
+        pretrain = Pretrain(pretrain_file, vec_file)
+        train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain,
+                                 vocab=None, evaluation=False, cutoff=args['vocab_cutoff'])
+
 
     # load data
     print("Loading data with batch size {}...".format(args['batch_size']))
-    train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain, evaluation=False, cutoff=args['vocab_cutoff'])
     vocab = train_batch.vocab
     train_dev_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain, vocab=vocab, evaluation=True)
     dev_batch = DataLoader(args['eval_file'], args['batch_size'], args, pretrain, vocab=vocab, evaluation=True)
@@ -139,6 +158,8 @@ def train(args):
 
     print("Training parser...")
     trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'], weight_decay=args['wdecay'])
+    if args['pretrain_lm'] is not None:
+        trainer.init_from_lm(lm_model, freeze=(not args['finetune']))
 
     global_step = 0
     max_steps = args['max_steps']
