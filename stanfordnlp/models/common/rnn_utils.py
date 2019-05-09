@@ -31,3 +31,8 @@ def reverse_padded_sequence(inputs, lengths, batch_first=False):
     if batch_first:
         reversed_inputs = reversed_inputs.transpose(0, 1)
     return reversed_inputs
+
+
+def copy_rnn_weights(src_rnn, trg_rnn):
+    for p_name, _ in src_rnn.named_parameters():
+        getattr(trg_rnn, p_name).data = getattr(src_rnn, p_name).data
