@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence, pack_sequence, PackedSequence
 
-from stanfordnlp.models.common.biaffine import DeepBiaffineScorer
+from stanfordnlp.models.common.biaffine import DeepBiaffineScorer, MLPScorer
 from stanfordnlp.models.common.hlstm import HighwayLSTM
 from stanfordnlp.models.common.dropout import WordDropout
 from stanfordnlp.models.common.vocab import CompositeVocab
@@ -69,27 +69,41 @@ class Parser(nn.Module):
 
         # recurrent layers
         assert args['lstm_type'] in ('bihlstm', 'hlstm', 'wdlstm')
+
+        if self.args['pretrain_lm'] is None or self.args['finetune']:
+            rnn_drop = args['dropout']
+            rnn_wdrop = args['rec_dropout']
+        else:
+            rnn_drop = 0
+            rnn_wdrop = 0
+
         if args['lstm_type'] == 'bihlstm':
             self.parserlstm = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=True,
-                                          dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
+                                          dropout=rnn_drop, rec_dropout=rnn_wdrop, highway_func=torch.tanh)
             self.parserlstm_h_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
             self.parserlstm_c_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
         elif args['lstm_type'] == 'hlstm':
             self.lstm_forward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                            dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
+                                            dropout=rnn_drop, rec_dropout=rnn_wdrop, highway_func=torch.tanh)
             self.lstm_backward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                             dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
+                                             dropout=rnn_drop, rec_dropout=rnn_wdrop, highway_func=torch.tanh)
         elif args['lstm_type'] == 'wdlstm':
             self.lstm_forward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                               dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+                                               dropout=rnn_drop, weight_dropout=rnn_wdrop)
             self.lstm_backward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                                dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+                                                dropout=rnn_drop, weight_dropout=rnn_wdrop)
 
         self.drop_replacement = nn.Parameter(torch.randn(input_size) / np.sqrt(input_size))
 
         # classifiers
-        self.unlabeled = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
-        self.deprel = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), pairwise=True, dropout=args['dropout'])
+        assert self.args['scorer'] in ('biaffine', 'mlp')
+        if self.args['scorer'] == 'biaffine':
+            self.unlabeled = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
+            self.deprel = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), pairwise=True, dropout=args['dropout'])
+        elif self.args['scorer'] == 'mlp':
+            self.unlabeled = MLPScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, 1, dropout=args['dropout'])
+            self.deprel = MLPScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), 1, dropout=args['dropout'])
+
         if args['linearization']:
             self.linearization = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
         if args['distance']:
@@ -151,8 +165,9 @@ class Parser(nn.Module):
         # lstm_inputs = torch.cat([x.data for x in inputs], 1)
         lstm_inputs = torch.cat(inputs, -1)
 
-        lstm_inputs = self.worddrop(lstm_inputs, self.drop_replacement)
-        lstm_inputs = self.drop(lstm_inputs)
+        if self.args['pretrain_lm'] is None or self.args['finetune']:
+            lstm_inputs = self.worddrop(lstm_inputs, self.drop_replacement)
+            lstm_inputs = self.drop(lstm_inputs)
 
         rev_lstm_inputs = reverse_padded_sequence(lstm_inputs, sentlens, batch_first=True)
         lstm_inputs = pack(lstm_inputs)
@@ -178,7 +193,7 @@ class Parser(nn.Module):
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
 
         unlabeled_scores = self.unlabeled(self.drop(lstm_outputs), self.drop(lstm_outputs)).squeeze(3)
-        deprel_scores = self.deprel(self.drop(lstm_outputs), self.drop(lstm_outputs))
+        # deprel_scores = self.deprel(self.drop(lstm_outputs), self.drop(lstm_outputs))
 
         if self.args['linearization'] or self.args['distance']:
             head_offset = torch.arange(word.size(1), device=head.device).view(1, 1, -1).expand(word.size(0), -1, -1) - \
@@ -206,10 +221,10 @@ class Parser(nn.Module):
             unlabeled_target = head.masked_fill(word_mask[:, 1:], -1)
             loss = self.crit(unlabeled_scores.contiguous().view(-1, unlabeled_scores.size(2)), unlabeled_target.view(-1))
 
-            deprel_scores = deprel_scores[:, 1:]  # exclude attachment for the root symbol
-            deprel_scores = torch.gather(deprel_scores, 2, head.unsqueeze(2).unsqueeze(3).expand(-1, -1, -1, len(self.vocab['deprel']))).view(-1, len(self.vocab['deprel']))
-            deprel_target = deprel.masked_fill(word_mask[:, 1:], -1)
-            loss += self.crit(deprel_scores.contiguous(), deprel_target.view(-1))
+            # deprel_scores = deprel_scores[:, 1:]  # exclude attachment for the root symbol
+            # deprel_scores = torch.gather(deprel_scores, 2, head.unsqueeze(2).unsqueeze(3).expand(-1, -1, -1, len(self.vocab['deprel']))).view(-1, len(self.vocab['deprel']))
+            # deprel_target = deprel.masked_fill(word_mask[:, 1:], -1)
+            # loss += self.crit(deprel_scores.contiguous(), deprel_target.view(-1))
 
             if self.args['linearization']:
                 #lin_scores = lin_scores[:, 1:].masked_select(goldmask)
@@ -228,6 +243,7 @@ class Parser(nn.Module):
         else:
             loss = 0
             preds.append(F.log_softmax(unlabeled_scores, 2).detach().cpu().numpy())
-            preds.append(deprel_scores.max(3)[1].detach().cpu().numpy())
+            # preds.append(deprel_scores.max(3)[1].detach().cpu().numpy())
+            preds.append(np.random.randn(*preds[0].shape, len(self.vocab['deprel'])).argmax(-1))
 
         return loss, preds
