@@ -55,7 +55,7 @@ class DataLoader:
             print("{} batches created for {}.".format(len(self.data), filename))
 
     def init_vocab(self, data):
-        assert self.eval == False # for eval vocab must exist
+        assert self.eval == False  # for eval vocab must exist
         charvocab = CharVocab(data, self.args['shorthand'])
         wordvocab = WordVocab(data, self.args['shorthand'], cutoff=self.cutoff, lower=True)
         uposvocab = WordVocab(data, self.args['shorthand'], idx=1)
@@ -154,7 +154,7 @@ class DataLoader:
 
         if not self.eval:
             # sort sentences (roughly) by length for better memory utilization
-            data = sorted(data, key = lambda x: len(x[0]), reverse=random.random() > .5)
+            data = sorted(data, key=lambda x: len(x[0]), reverse=random.random() > .5)
 
         current = []
         currentlen = 0
@@ -170,6 +170,7 @@ class DataLoader:
             res.append(current)
 
         return res
+
 
 def to_int(string, ignore_error=False):
     try:
