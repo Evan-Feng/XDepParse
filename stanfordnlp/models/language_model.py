@@ -159,7 +159,7 @@ def train(args):
                 duration = time.time() - start_time
                 log_loss /= args['log_step']
                 print(format_str.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), global_step,
-                                        max_steps, log_loss, duration, np.exp(log_loss),current_lr))
+                                        max_steps, log_loss, duration, np.exp(log_loss), current_lr))
                 log_loss = 0
 
             if global_step % args['eval_interval'] == 0:
@@ -208,13 +208,8 @@ def train(args):
 
 
 def evaluate(args):
-    raise NotImplementedError()
-
-    # file paths
-    system_pred_file = args['output_file']
-    gold_file = args['gold_file']
     model_file = args['save_dir'] + '/' + args['save_name'] if args['save_name'] is not None \
-        else '{}/{}_parser.pt'.format(args['save_dir'], args['shorthand'])
+        else '{}/{}_lm.pt'.format(args['save_dir'], args['shorthand'])
     pretrain_file = '{}/{}.pretrain.pt'.format(args['save_dir'], args['shorthand'])
 
     # load pretrain
@@ -240,18 +235,10 @@ def evaluate(args):
         for i, b in enumerate(batch):
             preds += trainer.predict(b)
     else:
-        # skip eval if dev data does not exist
         preds = []
 
-    # write to file and score
-    batch.conll.set(['head', 'deprel'], [y for x in preds for y in x])
-    batch.conll.write_conll(system_pred_file)
-
-    if gold_file is not None:
-        _, _, score = scorer.score(system_pred_file, gold_file)
-
-        print("Parser score:")
-        print("{} {:.2f}".format(args['shorthand'], score * 100))
+    for sent in preds:
+        print(' '.join([vocab['word'].id2unit(wid) for wid in sent]))
 
 if __name__ == '__main__':
     main()
