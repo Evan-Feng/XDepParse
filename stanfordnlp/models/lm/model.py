@@ -10,6 +10,7 @@ from stanfordnlp.models.common.hlstm import HighwayLSTM
 from stanfordnlp.models.common.dropout import WordDropout
 from stanfordnlp.models.common.vocab import CompositeVocab
 from stanfordnlp.models.common.char_model import CharacterModel
+from stanfordnlp.models.common.weight_drop_lstm import WeightDropLSTM
 
 
 def reverse_padded_sequence(inputs, lengths, batch_first=False):
@@ -99,10 +100,19 @@ class HLSTMLanguageModel(nn.Module):
             input_size += self.args['transformed_dim']
 
         # recurrent layers
-        self.lstm_forward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                        dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
-        self.lstm_backward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                         dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
+        if args['lstm_type'] == 'hlstm':
+            self.lstm_forward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
+                                            dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
+            self.lstm_backward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
+                                             dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
+        elif args['lstm_type'] == 'wdlstm':
+            self.lstm_forward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
+                                            dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+            self.lstm_backward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
+                                             dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+        else:
+            raise ValueError('LSTM type not supported')
+
         self.drop_replacement = nn.Parameter(torch.randn(input_size) / np.sqrt(input_size))
         # self.parserlstm_h_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
         # self.parserlstm_c_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
@@ -180,12 +190,14 @@ class HLSTMLanguageModel(nn.Module):
         # lstm_inputs = PackedSequence(lstm_inputs, inputs[0].batch_sizes)
         # rev_lstm_inputs = PackedSequence(rev_lstm_inputs, inputs[0].batch_sizes)
 
-        # forward language model
-        hid_forward, _ = self.lstm_forward(lstm_inputs, sentlens)
+        # forward / backward language model
+        if self.args['lstm_type'] == 'hlstm':
+            hid_forward, _ = self.lstm_forward(lstm_inputs, sentlens)
+            hid_backward, _ = self.lstm_backward(rev_lstm_inputs, sentlens)
+        elif self.args['lstm_type'] == 'wdlstm':
+            hid_forward, _ = self.lstm_forward(lstm_inputs)
+            hid_backward, _ = self.lstm_backward(rev_lstm_inputs)
         hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
-
-        # backward language model
-        hid_backward, _ = self.lstm_backward(rev_lstm_inputs, sentlens)
         hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
         hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
 
