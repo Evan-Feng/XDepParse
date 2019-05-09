@@ -48,6 +48,7 @@ def parse_args():
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
     parser.add_argument('--shorthand', type=str, help="Treebank shorthand")
+    parser.add_argument('--scorer', choices=['biaffine', 'mlp'], default='biaffine')
 
     parser.add_argument('--hidden_dim', type=int, default=400)
     parser.add_argument('--char_hidden_dim', type=int, default=400)
@@ -160,6 +161,12 @@ def train(args):
     trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'], weight_decay=args['wdecay'])
     if args['pretrain_lm'] is not None:
         trainer.init_from_lm(lm_model, freeze=(not args['finetune']))
+
+    print()
+    print('Parameters that require grad:')
+    for p_name, p in trainer.model.named_parameters():
+        if p.requires_grad == True:
+            print('\t{:10}    {}'.format(p_name, p.size()))
 
     global_step = 0
     max_steps = args['max_steps']
