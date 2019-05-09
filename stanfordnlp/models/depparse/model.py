@@ -180,9 +180,6 @@ class Parser(nn.Module):
         unlabeled_scores = self.unlabeled(self.drop(lstm_outputs), self.drop(lstm_outputs)).squeeze(3)
         deprel_scores = self.deprel(self.drop(lstm_outputs), self.drop(lstm_outputs))
 
-        # goldmask = head.new_zeros(*head.size(), head.size(-1)+1, dtype=torch.uint8)
-        #goldmask.scatter_(2, head.unsqueeze(2), 1)
-
         if self.args['linearization'] or self.args['distance']:
             head_offset = torch.arange(word.size(1), device=head.device).view(1, 1, -1).expand(word.size(0), -1, -1) - \
                 torch.arange(word.size(1), device=head.device).view(1, -1, 1).expand(word.size(0), -1, -1)
@@ -210,7 +207,6 @@ class Parser(nn.Module):
             loss = self.crit(unlabeled_scores.contiguous().view(-1, unlabeled_scores.size(2)), unlabeled_target.view(-1))
 
             deprel_scores = deprel_scores[:, 1:]  # exclude attachment for the root symbol
-            #deprel_scores = deprel_scores.masked_select(goldmask.unsqueeze(3)).view(-1, len(self.vocab['deprel']))
             deprel_scores = torch.gather(deprel_scores, 2, head.unsqueeze(2).unsqueeze(3).expand(-1, -1, -1, len(self.vocab['deprel']))).view(-1, len(self.vocab['deprel']))
             deprel_target = deprel.masked_fill(word_mask[:, 1:], -1)
             loss += self.crit(deprel_scores.contiguous(), deprel_target.view(-1))
