@@ -32,6 +32,8 @@ class DataLoader:
         #     raise NotImplementedError()
 
         data_list = [self.load_file(file) for file in input_srcs]
+        print('len 1 = {}'.format(len(data_list[0])))
+        print('len 2 = {}'.format(len(data_list[1])))
 
         # handle vocab
         if vocab is None:
@@ -47,7 +49,7 @@ class DataLoader:
             # data = random.sample(data, keep)
             # print("Subsample training set with rate {:g}".format(args['sample_train']))
 
-        data = sum(data_list, [])
+        data = data_list[0] * 6 + data_list[1] + sum(data_list[2:], [])
         data = self.preprocess(data, self.vocab, self.pretrain_vocab, args)
         # shuffle for training
         if self.shuffled:
@@ -66,7 +68,7 @@ class DataLoader:
 
         # construct wordvocab from multiple files
         wordvocabs = [WordVocab(data, self.args['shorthand'], cutoff=0, lower=True) for data in data_list]
-        wordset = list(set(sum([v._id2unit[len(VOCAB_PREFIX):len(VOCAB_PREFIX) + 6000] for v in wordvocabs], [])))
+        wordset = list(set(sum([v._id2unit[len(VOCAB_PREFIX):len(VOCAB_PREFIX) + 10000] for v in wordvocabs], [])))
         wordvocab = wordvocabs[0]
         wordvocab._id2unit = VOCAB_PREFIX + wordset
         wordvocab._unit2id = {w: i for i, w in enumerate(wordvocab._id2unit)}
@@ -189,7 +191,7 @@ class DataLoader:
 
         if not self.eval:
             # sort sentences (roughly) by length for better memory utilization
-            data = sorted(data, key=lambda x: len(x[0]), reverse=random.random() > .5)
+            data = sorted(data, key=lambda x: len(x[0]) + random.randint(0, 3), reverse=random.random() > .5)
 
         current = []
         currentlen = 0
