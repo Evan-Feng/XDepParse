@@ -116,7 +116,11 @@ class Trainer(BaseTrainer):
                 print('Initilizing {} from pretrained lm'.format(p_name))
                 if not hasattr(lm_model, p_name):
                     raise ValueError('lm model does not have attribute {}'.format(p_name))
-                copy_rnn_weights(getattr(lm_model, p_name), getattr(self.model, p_name))
+                if self.args['lstm_type'] == 'awdlstm':
+                    for i, rnn in enumerate(getattr(lm_model, p_name).rnns):
+                        copy_rnn_weights(rnn, getattr(self.model, p_name).rnns[i])
+                else:
+                    copy_rnn_weights(getattr(lm_model, p_name), getattr(self.model, p_name))
                 if freeze:
                     freeze_net(getattr(self.model, p_name))
                 finetune_params += list(getattr(self.model, p_name).parameters())
@@ -149,12 +153,22 @@ class Trainer(BaseTrainer):
 
     def unfreeze(self, layer_id, lr):
         finetune_params = []
-        p_names = [s.format(layer_id) for s in ['weight_hh_l{}', 'weight_hh_l{}_raw', 'weight_ih_l{}', 'bias_hh_l{}', 'bias_ih_l{}']]
-        for p_name in p_names:
-            getattr(self.model.lstm_forward, p_name).requires_grad = True
-            getattr(self.model.lstm_backward, p_name).requires_grad = True
-            finetune_params.append(getattr(self.model.lstm_forward, p_name))
-            finetune_params.append(getattr(self.model.lstm_backward, p_name))
+
+        if self.args['lstm_type'] == 'awdlstm':
+            p_names = ['weight_hh_l0', 'weight_hh_l0_raw', 'weight_ih_l0', 'bias_hh_l0', 'bias_ih_l0']
+            for p_name in p_names:
+                getattr(self.model.lstm_forward.rnns[layer_id], p_name).requires_grad = True
+                getattr(self.model.lstm_backward.rnns[layer_id], p_name).requires_grad = True
+                finetune_params.append(getattr(self.model.lstm_forward.rnns[layer_id], p_name))
+                finetune_params.append(getattr(self.model.lstm_backward.rnns[layer_id], p_name))
+
+        else:
+            p_names = [s.format(layer_id) for s in ['weight_hh_l{}', 'weight_hh_l{}_raw', 'weight_ih_l{}', 'bias_hh_l{}', 'bias_ih_l{}']]
+            for p_name in p_names:
+                getattr(self.model.lstm_forward, p_name).requires_grad = True
+                getattr(self.model.lstm_backward, p_name).requires_grad = True
+                finetune_params.append(getattr(self.model.lstm_forward, p_name))
+                finetune_params.append(getattr(self.model.lstm_backward, p_name))
         # print(self.optimizer.param_groups)
         print()
         print('Adding params {} with lr {}'.format(p_names, lr))
