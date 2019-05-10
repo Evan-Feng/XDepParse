@@ -187,7 +187,7 @@ def train(args):
         do_break = False
         for i, batch in enumerate(train_batch):
             if unfreeze_p < len(args['unfreeze_points']) and global_step == args['unfreeze_points'][unfreeze_p]:
-                trainer.unfreeze(args['num_layers'] - 1 - unfreeze_p, args['lr'] * (1 / .26)**(unfreeze_p + 1))
+                trainer.unfreeze(args['num_layers'] - 1 - unfreeze_p, args['lr'] * (1 / 2.6)**(unfreeze_p + 1))
                 unfreeze_p += 1
 
             start_time = time.time()
