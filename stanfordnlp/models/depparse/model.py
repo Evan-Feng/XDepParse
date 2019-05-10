@@ -70,12 +70,12 @@ class Parser(nn.Module):
         # recurrent layers
         assert args['lstm_type'] in ('bihlstm', 'hlstm', 'wdlstm')
 
-        if self.args['pretrain_lm'] is None or self.args['finetune']:
-            rnn_drop = args['dropout']
-            rnn_wdrop = args['rec_dropout']
-        else:
-            rnn_drop = 0
-            rnn_wdrop = 0
+        # if self.args['pretrain_lm'] is None or self.args['finetune']:
+        rnn_drop = args['dropout']
+        rnn_wdrop = args['rec_dropout']
+        # else:
+        #     rnn_drop = 0
+        #     rnn_wdrop = 0
 
         if args['lstm_type'] == 'bihlstm':
             self.parserlstm = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=True,
