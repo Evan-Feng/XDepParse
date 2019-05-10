@@ -53,12 +53,53 @@ class DataLoader:
         data = self.preprocess(data, self.vocab, self.pretrain_vocab, args)
         # shuffle for training
         if self.shuffled:
-            print('shuffling data')
+            print('Shuffling data')
             random.shuffle(data)
+
+        def sum_list(l):
+            res = []
+            for t in l:
+                res += t
+            return res
+
+        def bachify(data, bs, bptt):
+            # def bachify_row(row:list, bs, bptt):
+            res = []
+            next_word = []
+            assert len(data[0]) % bs == 0
+            lb = (len(data[0]) // bs)
+            for i in range(0, lb, bptt):
+                j = i + bptt
+                if j + 1 > lb:
+                    break
+                batch = [[l[k * lb + i:k * lb + j] for k in range(bs)] for l in data]  # feat -> sent -> seq
+                batch = list(zip(*batch))
+                nw_batch = [data[0][k * lb + i + 1:k * lb + j + 1] for k in range(bs)]
+                res.append(batch)
+                next_word.append(nw_batch)
+            return res, next_word
+
+        if args['bptt'] is not None:
+            print('Using BPTT of length {}'.format(bptt))
+            bptt = args['bptt']
+            bs = max(args['batch_size'] // bptt, 1)
+            random.shuffle(data)
+            data = list(zip(*data))
+            data = [sum_list(l) for l in data]
+            l_trunc = len(data[0]) - (len(data[0]) % bs)
+            f_data = [l[:l_trunc] for l in data]
+            b_data = [l[l_trunc:][::-1] for l in data]
+            self.f_data, self.f_nw = bachify(f_data, bs, bptt)
+            self.b_data, self.b_nw = bachify(b_data, bs, bptt)
+            self.data = self.f_data
+        else:
+            print('BPTT disabled')
+            self.data = self.chunk_batches(data)
+
         self.num_examples = len(data)
 
         # chunk into batches
-        self.data = self.chunk_batches(data)
+
         print("{} batches created for {}.".format(len(self.data), input_srcs))
 
     def init_vocab(self, data_list):
@@ -87,6 +128,9 @@ class DataLoader:
         return vocab
 
     def preprocess(self, data, vocab, pretrain_vocab, args):
+        """
+        returns: list[list[list]] sent -> feat -> seq
+        """
         processed = []
         xpos_replacement = [[ROOT_ID] * len(vocab['xpos'])] if isinstance(vocab['xpos'], CompositeVocab) else [ROOT_ID]
         feats_replacement = [[ROOT_ID] * len(vocab['feats'])]
@@ -101,6 +145,7 @@ class DataLoader:
             # processed_sent += [[to_int(w[5], ignore_error=self.eval) for w in sent]]
             # processed_sent += [vocab['deprel'].map([w[6] for w in sent])]
             processed.append(processed_sent)
+
         return processed
 
     def __len__(self):
@@ -150,7 +195,47 @@ class DataLoader:
         prev_word[:, 1:] = words[:, :-1]
         prev_word[:, 0] = PAD_ID
 
-        return words, words_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, next_word, prev_word, orig_idx, word_orig_idx, sentlens, word_lens
+        if self.args['bptt'] is not None:
+            next_word = torch.tensor(self.f_nw[key])
+            prev_word = torch.tensor(self.b_nw[key])
+
+            b_batch = self.b_data[key]
+            b_batch_size = len(b_batch)
+            b_batch = list(zip(*b_batch))
+            assert len(b_batch) == 7
+
+            # sort sentences by lens for easy RNN operations
+            b_lens = [len(x) for x in b_batch[0]]
+            b_batch, orig_idx = sort_all(b_batch, b_lens)
+
+            # sort words by lens for easy char-RNN operations
+            b_batch_words = [w for sent in b_batch[1] for w in sent]
+            b_word_lens = [len(x) for x in b_batch_words]
+            b_batch_words, b_word_orig_idx = sort_all([b_batch_words], b_word_lens)
+            b_batch_words = b_batch_words[0]
+            b_word_lens = [len(x) for x in b_batch_words]
+
+            # convert to tensors
+            b_words = b_batch[0]
+            b_words = get_long_tensor(b_words, b_batch_size)
+            b_words_mask = torch.eq(b_words, PAD_ID)
+            b_wordchars = get_long_tensor(b_batch_words, len(word_lens))
+            b_wordchars_mask = torch.eq(wordchars, PAD_ID)
+
+            b_upos = get_long_tensor(b_batch[2], b_batch_size)
+            b_xpos = get_long_tensor(b_batch[3], b_batch_size)
+            b_ufeats = get_long_tensor(b_batch[4], b_batch_size)
+            b_pretrained = get_long_tensor(b_batch[5], b_batch_size)
+            b_sentlens = [len(x) for x in b_batch[0]]
+            b_lemma = get_long_tensor(b_batch[6], b_batch_size)
+            return words, words_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained,\
+                lemma, next_word, None, orig_idx, word_orig_idx, sentlens, word_lens,\
+                (b_words, b_words_mask, b_wordchars, b_wordchars_mask, b_upos, b_xpos, b_ufeats, b_pretrained,
+                 b_lemma, prev_word, None, b_orig_idx, b_word_orig_idx, b_sentlens, b_word_lens)
+
+        else:
+            return words, words_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, \
+                next_word, prev_word, orig_idx, word_orig_idx, sentlens, word_lens
 
     def load_file(self, filename, evaluation=False):
         """
