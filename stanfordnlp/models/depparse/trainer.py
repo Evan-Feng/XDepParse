@@ -124,12 +124,46 @@ class Trainer(BaseTrainer):
                 print('Module not found, skipping {}'.format(p_name))
 
         if not freeze:
+            print('############ TEST ############')
+            for p in finetune_params:
+                p.requires_grad = False
+            finetune_params = []
+            for p_name in ['weight_hh_l2', 'weight_hh_l2_raw', 'weight_ih_l2', 'bias_hh_l2', 'bias_ih_l2']:
+                getattr(self.model.lstm_forward, p_name).requires_grad = True
+                getattr(self.model.lstm_backward, p_name).requires_grad = True
+                finetune_params.append(getattr(self.model.lstm_forward, p_name))
+                finetune_params.append(getattr(self.model.lstm_backward, p_name))
             if self.args['optim'] == 'adam':
                 self.optimizer = torch.optim.Adam([
                     {'params': finetune_params, 'lr': self.args['finetune_lr']},
                 ], lr=self.args['lr'], weight_decay=self.args['wdecay'])
             else:
                 raise NotImplementedError()
+            print('############ TEST ############')
+        else:
+            if self.args['optim'] == 'adam':
+                self.optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad],
+                                                  lr=self.args['lr'], weight_decay=self.args['wdecay'])
+            else:
+                raise NotImplementedError()
+
+    def unfreeze(self, layer_id, lr):
+        finetune_params = []
+        p_names = [s.format(layer_id) for s in ['weight_hh_l{}', 'weight_hh_l{}_raw', 'weight_ih_l{}', 'bias_hh_l{}', 'bias_ih_l{}']]
+        for p_name in p_names:
+            getattr(self.model.lstm_forward, p_name).requires_grad = True
+            getattr(self.model.lstm_backward, p_name).requires_grad = True
+            finetune_params.append(getattr(self.model.lstm_forward, p_name))
+            finetune_params.append(getattr(self.model.lstm_backward, p_name))
+        # print(self.optimizer.param_groups)
+        print()
+        print('Adding params {} with lr {}'.format(p_names, lr))
+        print()
+        self.optimizer.add_param_group({
+            'params': finetune_params,
+            'lr': lr,
+        })
+        # print(self.optimizer.param_groups)
 
     def save(self, filename, skip_modules=True):
         model_state = self.model.state_dict()
