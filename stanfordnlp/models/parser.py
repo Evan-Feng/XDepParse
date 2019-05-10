@@ -272,6 +272,8 @@ def evaluate(args):
 
     # load pretrain
     pretrain = Pretrain(pretrain_file)
+    vec_file = utils.get_wordvec_file(args['wordvec_dir'], args['shorthand'])
+    pretrain = Pretrain(pretrain_file, vec_file)
 
     # load model
     use_cuda = args['cuda'] and not args['cpu']
