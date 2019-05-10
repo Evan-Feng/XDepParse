@@ -317,8 +317,8 @@ class ParserLM(nn.Module):
         hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
         hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
 
-        scores_forward = self.dec_forward(hid_forward)
-        scores_backward = self.dec_backward(hid_backward)
+        scores_forward = self.dec_forward(self.drop(hid_forward))
+        scores_backward = self.dec_backward(self.drop(hid_backward))
 
         # print(' '.join([self.vocab['word'].id2unit(t) for t in word[0]]))
         # print(' '.join([self.vocab['word'].id2unit(t) for t in next_word[0]]))

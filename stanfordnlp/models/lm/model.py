@@ -169,8 +169,8 @@ class HLSTMLanguageModel(nn.Module):
         hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
         hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
 
-        scores_forward = self.dec_forward(hid_forward)
-        scores_backward = self.dec_backward(hid_backward)
+        scores_forward = self.dec_forward(self.drop(hid_forward))
+        scores_backward = self.dec_backward(self.drop(hid_backward))
 
         next_word = next_word.masked_fill(next_word == PAD_ID, -1)
         prev_word = prev_word.masked_fill(prev_word == PAD_ID, -1)
