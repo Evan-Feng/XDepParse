@@ -46,8 +46,12 @@ class Trainer(BaseTrainer):
             self.model.cuda()
         else:
             self.model.cpu()
-        self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
-                                             betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
+        # self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
+        #                                      betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
+        if self.args['optim'] == 'adam':
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args['lr'], weight_decay=self.args['wdecay'])
+        else:
+            raise NotImplementedError()
 
     def update(self, batch, eval=False):
         inputs, orig_idx, word_orig_idx, sentlens, wordlens = unpack_batch(batch, self.use_cuda)
@@ -83,7 +87,7 @@ class Trainer(BaseTrainer):
             pred_tokens = utils.unsort(pred_tokens, orig_idx)
         return pred_tokens
 
-    def init_from_lm(self, lm_model, freeze:bool=False):
+    def init_from_lm(self, lm_model, freeze: bool=False):
         def freeze_net(net):
             for p in net.parameters():
                 p.requires_grad = False
@@ -92,6 +96,7 @@ class Trainer(BaseTrainer):
                       'ufeats_emb', 'charmodel', 'trans_char', 'trans_char',
                       'trans_pretrained']
         lstm_params = ['parserlstm', 'lstm_forward', 'lstm_backward']
+        finetune_params = []
 
         for p_name in param_list:
             if hasattr(self.model, p_name):
@@ -102,6 +107,7 @@ class Trainer(BaseTrainer):
                 setattr(self.model, p_name, module)
                 if freeze:
                     freeze_net(module)
+                finetune_params += list(module.parameters())
             else:
                 print('Module not found, skipping {}'.format(p_name))
 
@@ -113,8 +119,17 @@ class Trainer(BaseTrainer):
                 copy_rnn_weights(getattr(lm_model, p_name), getattr(self.model, p_name))
                 if freeze:
                     freeze_net(getattr(self.model, p_name))
+                finetune_params += list(getattr(self.model, p_name).parameters())
             else:
                 print('Module not found, skipping {}'.format(p_name))
+
+        if not freeze:
+            if self.args['optim'] == 'adam':
+                self.optimizer = torch.optim.Adam([
+                    {'params': finetune_params, 'lr': self.args['finetune_lr']},
+                ], lr=self.args['lr'], weight_decay=self.args['wdecay'])
+            else:
+                raise NotImplementedError()
 
     def save(self, filename, skip_modules=True):
         model_state = self.model.state_dict()
