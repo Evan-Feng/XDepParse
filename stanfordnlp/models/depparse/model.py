@@ -11,6 +11,7 @@ from stanfordnlp.models.common.vocab import CompositeVocab
 from stanfordnlp.models.common.char_model import CharacterModel
 from stanfordnlp.models.common.weight_drop_lstm import WeightDropLSTM
 from stanfordnlp.models.common.rnn_utils import reverse_padded_sequence
+from stanfordnlp.models.lm.model import AWDLSTM
 
 
 class Parser(nn.Module):
@@ -68,7 +69,7 @@ class Parser(nn.Module):
             input_size += self.args['transformed_dim']
 
         # recurrent layers
-        assert args['lstm_type'] in ('bihlstm', 'hlstm', 'wdlstm')
+        assert args['lstm_type'] in ('bihlstm', 'hlstm', 'wdlstm', 'awdlstm')
 
         # if self.args['pretrain_lm'] is None or self.args['finetune']:
         rnn_drop = args['dropout']
@@ -92,22 +93,32 @@ class Parser(nn.Module):
                                                dropout=rnn_drop, weight_dropout=rnn_wdrop)
             self.lstm_backward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
                                                 dropout=rnn_drop, weight_dropout=rnn_wdrop)
+        elif args['lstm_type'] == 'awdlstm':
+            self.lstm_forward = AWDLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
+                                        dropout=rnn_drop, weight_dropout=rnn_wdrop)
+            self.lstm_backward = AWDLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
+                                         dropout=rnn_drop, weight_dropout=rnn_wdrop)
 
         self.drop_replacement = nn.Parameter(torch.randn(input_size) / np.sqrt(input_size))
 
         # classifiers
+        if self.args['lstm_type'] == 'awdlstm':
+            hdim = self.args['word_emb_dim'] * 2
+        else:
+            hdim = self.args['hidden_dim'] * 2
+
         assert self.args['scorer'] in ('biaffine', 'mlp')
         if self.args['scorer'] == 'biaffine':
-            self.unlabeled = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
-            self.deprel = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), pairwise=True, dropout=args['dropout'])
+            self.unlabeled = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
+            self.deprel = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), pairwise=True, dropout=args['dropout'])
         elif self.args['scorer'] == 'mlp':
-            self.unlabeled = MLPScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, 1, dropout=args['dropout'])
-            self.deprel = MLPScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), 1, dropout=args['dropout'])
+            self.unlabeled = MLPScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], 1, 1, dropout=args['dropout'])
+            self.deprel = MLPScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), 1, dropout=args['dropout'])
 
         if args['linearization']:
-            self.linearization = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
+            self.linearization = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
         if args['distance']:
-            self.distance = DeepBiaffineScorer(2 * self.args['hidden_dim'], 2 * self.args['hidden_dim'], self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
+            self.distance = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
 
         # criterion
         self.crit = nn.CrossEntropyLoss(ignore_index=-1, reduction='sum')  # ignore padding
@@ -170,27 +181,34 @@ class Parser(nn.Module):
             lstm_inputs = self.drop(lstm_inputs)
 
         rev_lstm_inputs = reverse_padded_sequence(lstm_inputs, sentlens, batch_first=True)
-        lstm_inputs = pack(lstm_inputs)
-        rev_lstm_inputs = pack(rev_lstm_inputs)
 
         # lstm_inputs = PackedSequence(lstm_inputs, inputs[0].batch_sizes)
 
         if self.args['lstm_type'] == 'bihlstm':
+            lstm_inputs = pack(lstm_inputs)
             lstm_outputs, _ = self.parserlstm(lstm_inputs, sentlens, hx=(self.parserlstm_h_init.expand(
                 2 * self.args['num_layers'], word.size(0), self.args['hidden_dim']).contiguous(), self.parserlstm_c_init.expand(2 * self.args['num_layers'], word.size(0), self.args['hidden_dim']).contiguous()))
             lstm_outputs, _ = pad_packed_sequence(lstm_outputs, batch_first=True)
         elif self.args['lstm_type'] == 'hlstm':
+            rev_lstm_inputs = pack(rev_lstm_inputs)
             hid_forward, _ = self.lstm_forward(lstm_inputs, sentlens)
             hid_backward, _ = self.lstm_backward(lstm_inputs, sentlens)
-            hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
-            hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+            # hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
+            # hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
             hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
         elif self.args['lstm_type'] == 'wdlstm':
             hid_forward, _ = self.lstm_forward(lstm_inputs)
             hid_backward, _ = self.lstm_backward(rev_lstm_inputs)
-            hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
-            hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+            # hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
+            # hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+            hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
+            lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
+        elif self.args['lstm_type'] == 'awdlstm':
+            hid_forward, _ = self.lstm_forward(lstm_inputs)
+            hid_backward, _ = self.lstm_backward(rev_lstm_inputs)
+            # hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
+            # hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
             hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
 
