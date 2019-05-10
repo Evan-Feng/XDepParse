@@ -13,6 +13,45 @@ from stanfordnlp.models.common.char_model import CharacterModel
 from stanfordnlp.models.common.weight_drop_lstm import WeightDropLSTM
 from stanfordnlp.models.common.rnn_utils import reverse_padded_sequence
 
+
+def dropout_mask(x, sz, p: float):
+    "Return a dropout mask of the same type as `x`, size `sz`, with probability `p` to cancel an element."
+    return x.new(*sz).bernoulli_(1 - p).div_(1 - p)
+
+
+class RNNDropout(nn.Module):
+    "Dropout with probability `p` that is consistent on the seq_len dimension."
+
+    def __init__(self, p: float=0.5):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x):
+        if not self.training or self.p == 0.:
+            return x
+        m = dropout_mask(x.data, (x.size(0), 1, x.size(2)), self.p)
+        return x * m
+
+
+class AWDLSTM(nn.Module):
+
+    def __init__(self, in_dim, hid_dim, out_dim, n_layers, dropout, weight_dropout):
+        super().__init__()
+        self.n_layers = n_layers
+        self.rnns = [WeightDropLSTM(in_dim if l == 0 else hid_dim, (hid_dim if l != n_layers - 1 else out_dim),
+                                    1, batch_first=True, weight_dropout=weight_dropout) for l in range(n_layers)]
+        self.rnns = nn.ModuleList(self.rnns)
+        self.hidden_dps = nn.ModuleList([RNNDropout(dropout) for l in range(n_layers)])
+
+    def forward(self, inputs):
+        raw_output = inputs
+        for l, (rnn, hid_dp) in enumerate(zip(self.rnns, self.hidden_dps)):
+            raw_output, _ = rnn(raw_output)
+            if l != self.n_layers - 1:
+                raw_output = hid_dp(raw_output)
+        return raw_output, None
+
+
 class HLSTMLanguageModel(nn.Module):
 
     def __init__(self, args, vocab, emb_matrix=None, share_hid=False):
@@ -75,9 +114,14 @@ class HLSTMLanguageModel(nn.Module):
                                              dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
         elif args['lstm_type'] == 'wdlstm':
             self.lstm_forward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                            dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+                                               dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
             self.lstm_backward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                             dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+                                                dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+        elif args['lstm_type'] == 'awdlstm':
+            self.lstm_forward = AWDLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
+                                        dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+            self.lstm_backward = AWDLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
+                                         dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
         else:
             raise ValueError('LSTM type not supported')
 
@@ -85,8 +129,16 @@ class HLSTMLanguageModel(nn.Module):
         # self.parserlstm_h_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
         # self.parserlstm_c_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
 
-        self.dec_forward = nn.Linear(self.args['hidden_dim'], len(vocab['word']))
-        self.dec_backward = nn.Linear(self.args['hidden_dim'], len(vocab['word']))
+        if args['lstm_type'] == 'awdlstm':
+            self.dec_forward = nn.Linear(self.args['word_emb_dim'], len(vocab['word']))
+            self.dec_backward = nn.Linear(self.args['word_emb_dim'], len(vocab['word']))
+            print('sharing weight')
+            self.dec_forward.weight = self.word_emb.weight
+            self.dec_backward.weight = self.word_emb.weight
+
+        else:
+            self.dec_forward = nn.Linear(self.args['hidden_dim'], len(vocab['word']))
+            self.dec_backward = nn.Linear(self.args['hidden_dim'], len(vocab['word']))
 
         # criterion
         self.crit = nn.CrossEntropyLoss(ignore_index=-1, reduction='sum')  # ignore padding
@@ -153,20 +205,21 @@ class HLSTMLanguageModel(nn.Module):
 
         rev_lstm_inputs = reverse_padded_sequence(lstm_inputs, sentlens, batch_first=True)
 
-        lstm_inputs = pack(lstm_inputs)
-        rev_lstm_inputs = pack(rev_lstm_inputs)
         # lstm_inputs = PackedSequence(lstm_inputs, inputs[0].batch_sizes)
         # rev_lstm_inputs = PackedSequence(rev_lstm_inputs, inputs[0].batch_sizes)
 
         # forward / backward language model
         if self.args['lstm_type'] == 'hlstm':
+            lstm_inputs = pack(lstm_inputs)
+            rev_lstm_inputs = pack(rev_lstm_inputs)
             hid_forward, _ = self.lstm_forward(lstm_inputs, sentlens)
             hid_backward, _ = self.lstm_backward(rev_lstm_inputs, sentlens)
-        elif self.args['lstm_type'] == 'wdlstm':
+            hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
+            hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+        elif self.args['lstm_type'] in ('wdlstm', 'awdlstm'):
             hid_forward, _ = self.lstm_forward(lstm_inputs)
             hid_backward, _ = self.lstm_backward(rev_lstm_inputs)
-        hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
-        hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+
         hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
 
         scores_forward = self.dec_forward(self.drop(hid_forward))
@@ -181,7 +234,7 @@ class HLSTMLanguageModel(nn.Module):
             loss_forward = self.crit(scores_forward.view(-1, scores_forward.size(-1)), next_word.view(-1))
             loss_backward = self.crit(scores_backward.view(-1, scores_backward.size(-1)), prev_word.view(-1))
             # print('forward ppl {:.6f} {:.6f}'.format(np.exp(loss_forward.item() / wordchars.size(0)),
-                                                     # np.exp(loss_backward.item() / wordchars.size(0))))
+            # np.exp(loss_backward.item() / wordchars.size(0))))
             loss = (loss_forward + loss_backward) / (2 * wordchars.size(0))  # number of words
             preds.append(F.log_softmax(scores_forward, -1).detach().cpu().numpy())
             preds.append(F.log_softmax(scores_backward, -1).detach().cpu().numpy())
