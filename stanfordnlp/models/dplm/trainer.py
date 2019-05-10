@@ -36,8 +36,12 @@ class Trainer(BaseTrainer):
             self.model.cuda()
         else:
             self.model.cpu()
-        self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
-                                             betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
+        # self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
+        #                                      betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
+        if self.args['optim'] == 'adam':
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args['lr'], weight_decay=self.args['wdecay'])
+        else:
+            raise NotImplementedError()
 
     def update(self, dp_batch, lm_batch, eval=False):
         inputs, orig_idx, word_orig_idx, sentlens, wordlens = depparse_unpack(dp_batch, self.use_cuda)
