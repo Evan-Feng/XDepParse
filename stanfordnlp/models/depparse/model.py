@@ -184,12 +184,14 @@ class Parser(nn.Module):
             hid_backward, _ = self.lstm_backward(lstm_inputs, sentlens)
             hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
             hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+            hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
         elif self.args['lstm_type'] == 'wdlstm':
             hid_forward, _ = self.lstm_forward(lstm_inputs)
             hid_backward, _ = self.lstm_backward(rev_lstm_inputs)
             hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
             hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+            hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
 
         unlabeled_scores = self.unlabeled(self.drop(lstm_outputs), self.drop(lstm_outputs)).squeeze(3)
