@@ -39,7 +39,7 @@ class Trainer(BaseTrainer):
         # self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
         #                                      betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
         if self.args['optim'] == 'adam':
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args['lr'], weight_decay=self.args['wdecay'])
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args['lr'], weight_decay=self.args['wdecay'], betas=(0.7, 0.999))
         else:
             raise NotImplementedError()
 
