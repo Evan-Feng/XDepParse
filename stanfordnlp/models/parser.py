@@ -44,6 +44,7 @@ def parse_args():
     parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm', 'bihlstm'], help="LSTM type")
     parser.add_argument('--pretrain_lm', type=str, default=None, help='dir of the pretrained lm (optional)')
     parser.add_argument('--finetune', action='store_true', help='finetune all pretrained parameters')
+    parser.add_argument('--finetune_lr', type=float, default=0, help='finetune all pretrained parameters')
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
