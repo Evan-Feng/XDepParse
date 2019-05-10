@@ -39,7 +39,7 @@ def parse_args():
     # parser.add_argument('--vocab_cutoff', type=int, default=7, help='Word frequency threshold for vocab construction')
     parser.add_argument('--lemma_emb_dim', type=int, default=75)
     parser.add_argument('--wdecay', type=float, default=1e-6, help='weight decay applied to all weights')
-    parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm'], help="LSTM type")
+    parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm', 'awdlstm'], help="LSTM type")
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
@@ -133,6 +133,12 @@ def train(args):
 
     print("Training language model...")
     trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'], weight_decay=args['wdecay'])
+
+    print()
+    print('Parameters:')
+    for p_name, p in trainer.model.named_parameters():
+        if p.requires_grad == True:
+            print('\t{:10}    {}'.format(p_name, p.size()))
 
     global_step = 0
     max_steps = args['max_steps']
