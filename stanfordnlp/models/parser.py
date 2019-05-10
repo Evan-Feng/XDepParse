@@ -45,6 +45,7 @@ def parse_args():
     parser.add_argument('--pretrain_lm', type=str, default=None, help='dir of the pretrained lm (optional)')
     parser.add_argument('--finetune', action='store_true', help='finetune all pretrained parameters')
     parser.add_argument('--finetune_lr', type=float, default=0, help='finetune all pretrained parameters')
+    parser.add_argument('--unfreeze_points', type=int, nargs='*', default=[])
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
@@ -142,7 +143,6 @@ def train(args):
         train_batch = DataLoader(args['train_file'], args['batch_size'], args, pretrain,
                                  vocab=None, evaluation=False, cutoff=args['vocab_cutoff'])
 
-
     # load data
     print("Loading data with batch size {}...".format(args['batch_size']))
     vocab = train_batch.vocab
@@ -176,6 +176,7 @@ def train(args):
     current_lr = args['lr']
     global_start_time = time.time()
     format_str = '{}: step {}/{}, loss = {:.6f} ({:.3f} sec/batch), lr: {:.6f}'
+    unfreeze_p = 0
 
     using_amsgrad = False
     last_best_step = 0
@@ -185,6 +186,10 @@ def train(args):
     while True:
         do_break = False
         for i, batch in enumerate(train_batch):
+            if unfreeze_p < len(args['unfreeze_points']) and global_step == args['unfreeze_points'][unfreeze_p]:
+                trainer.unfreeze(args['num_layers'] - 1 - unfreeze_p, args['lr'] * (1 / .26)**(unfreeze_p + 1))
+                unfreeze_p += 1
+
             start_time = time.time()
             global_step += 1
             loss = trainer.update(batch, eval=False)  # update step
