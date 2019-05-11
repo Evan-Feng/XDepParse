@@ -9,9 +9,9 @@ from stanfordnlp.models.common.hlstm import HighwayLSTM
 from stanfordnlp.models.common.dropout import WordDropout
 from stanfordnlp.models.common.vocab import CompositeVocab
 from stanfordnlp.models.common.char_model import CharacterModel
-from stanfordnlp.models.common.weight_drop_lstm import WeightDropLSTM
+from stanfordnlp.models.common.layers import WeightDropLSTM
 from stanfordnlp.models.common.rnn_utils import reverse_padded_sequence
-from stanfordnlp.models.lm.model import AWDLSTM
+from stanfordnlp.models.common.layers import MultiLayerLSTM
 
 
 class Parser(nn.Module):
@@ -94,9 +94,9 @@ class Parser(nn.Module):
             self.lstm_backward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
                                                 dropout=rnn_drop, weight_dropout=rnn_wdrop)
         elif args['lstm_type'] == 'awdlstm':
-            self.lstm_forward = AWDLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
+            self.lstm_forward = MultiLayerLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
                                         dropout=rnn_drop, weight_dropout=rnn_wdrop)
-            self.lstm_backward = AWDLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
+            self.lstm_backward = MultiLayerLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
                                          dropout=rnn_drop, weight_dropout=rnn_wdrop)
 
         self.drop_replacement = nn.Parameter(torch.randn(input_size) / np.sqrt(input_size))

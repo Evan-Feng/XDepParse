@@ -10,7 +10,7 @@ from stanfordnlp.models.common.hlstm import HighwayLSTM
 from stanfordnlp.models.common.dropout import WordDropout
 from stanfordnlp.models.common.vocab import CompositeVocab
 from stanfordnlp.models.common.char_model import CharacterModel
-from stanfordnlp.models.common.weight_drop_lstm import WeightDropLSTM
+from stanfordnlp.models.common.layers import WeightDropLSTM
 from stanfordnlp.models.common.rnn_utils import reverse_padded_sequence
 
 
