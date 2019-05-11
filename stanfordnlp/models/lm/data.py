@@ -32,8 +32,8 @@ class DataLoader:
         #     raise NotImplementedError()
 
         data_list = [self.load_file(file) for file in input_srcs]
-        print('len 1 = {}'.format(len(data_list[0])))
-        print('len 2 = {}'.format(len(data_list[1])))
+        for f_name, data in zip(input_srcs, data_list):
+            print('File {} contains {} examples'.format(f_name, len(data)))
 
         # handle vocab
         if vocab is None:
@@ -45,11 +45,18 @@ class DataLoader:
         # filter and sample data
         if args.get('sample_train', 1.0) < 1.0 and not self.eval:
             raise NotImplementedError()
-            # keep = int(args['sample_train'] * len(data))
-            # data = random.sample(data, keep)
-            # print("Subsample training set with rate {:g}".format(args['sample_train']))
 
-        data = data_list[0] * 6 + data_list[1] + sum(data_list[2:], [])
+        if args['balance'] and not evaluation:
+            print('Balancing data across files')
+            l_max = max([len(data) for data in data_list])
+            rates = [l_max // len(data) for data in data_list]
+            ans = []
+            for r, data in zip(rates, data_list):
+                ans += data * r
+            data = ans
+        else:
+            data = sum(data_list, [])
+
         data = self.preprocess(data, self.vocab, self.pretrain_vocab, args)
         # shuffle for training
         if self.shuffled:
@@ -113,7 +120,7 @@ class DataLoader:
         wordvocab = wordvocabs[0]
         wordvocab._id2unit = VOCAB_PREFIX + wordset
         wordvocab._unit2id = {w: i for i, w in enumerate(wordvocab._id2unit)}
-        print('Joint word vocabulary of size {}'.format(len(wordvocab)))
+        print('Constructing a joint word vocabulary of size {} ...'.format(len(wordvocab)))
 
         uposvocab = WordVocab(data_all, self.args['shorthand'], idx=1)
         xposvocab = xpos_vocab_factory(data_all, self.args['shorthand'])
