@@ -9,7 +9,7 @@ from torch import nn
 from stanfordnlp.models.common.trainer import Trainer as BaseTrainer
 from stanfordnlp.models.common import utils, loss
 from stanfordnlp.models.common.chuliu_edmonds import chuliu_edmonds_one_root
-from stanfordnlp.models.lm.model import HLSTMLanguageModel
+from stanfordnlp.models.lm.model import LSTMBiLM
 from stanfordnlp.models.pos.vocab import MultiVocab
 
 
@@ -39,7 +39,7 @@ class Trainer(BaseTrainer):
             # build model from scratch
             self.args = args
             self.vocab = vocab
-            self.model = HLSTMLanguageModel(args, vocab, emb_matrix=pretrain.emb)
+            self.model = LSTMBiLM(args, vocab, emb_matrix=pretrain.emb)
         self.parameters = [p for p in self.model.parameters() if p.requires_grad]
         if self.use_cuda:
             self.model.cuda()
@@ -111,5 +111,5 @@ class Trainer(BaseTrainer):
             sys.exit(1)
         self.args = checkpoint['config']
         self.vocab = MultiVocab.load_state_dict(checkpoint['vocab'])
-        self.model = HLSTMLanguageModel(self.args, self.vocab, emb_matrix=pretrain.emb)
+        self.model = LSTMBiLM(self.args, self.vocab, emb_matrix=pretrain.emb)
         self.model.load_state_dict(checkpoint['model'], strict=False)
