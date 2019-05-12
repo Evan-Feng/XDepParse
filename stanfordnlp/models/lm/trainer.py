@@ -1,5 +1,5 @@
 """
-A trainer class to handle training and testing of models.
+A trainer class to handle training and testing of language models.
 """
 
 import sys
@@ -29,7 +29,7 @@ def unpack_batch(batch, use_cuda):
 class Trainer(BaseTrainer):
     """ A trainer for training models. """
 
-    def __init__(self, args=None, vocab=None, pretrain=None, model_file=None, use_cuda=False, weight_decay=0):
+    def __init__(self, args=None, vocab=None, pretrain=None, model_file=None, use_cuda=False):
         self.use_cuda = use_cuda
         if model_file is not None:
             # load everything from file
@@ -45,12 +45,10 @@ class Trainer(BaseTrainer):
             self.model.cuda()
         else:
             self.model.cpu()
-        # self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
-        #                                      betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
-        if self.args['optim'] == 'adam':
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args['lr'], weight_decay=self.args['wdecay'], betas=(0.7, 0.999))
-        else:
-            raise NotImplementedError()
+
+        self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
+                                             betas=(self.args['beta1'], self.args['beta2']),
+                                             weight_decay=self.args['wdecay'])
 
     def update(self, batch, eval=False):
         inputs, orig_idx, word_orig_idx, sentlens, wordlens = unpack_batch(batch, self.use_cuda)
@@ -61,7 +59,8 @@ class Trainer(BaseTrainer):
         else:
             self.model.train()
             self.optimizer.zero_grad()
-        loss, preds = self.model(word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, next_word, prev_word, word_orig_idx, sentlens, wordlens)
+        loss, preds = self.model(word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats,
+                                 pretrained, lemma, next_word, prev_word, word_orig_idx, sentlens, wordlens)
         loss_val = loss.data.item()
 
         if eval:
@@ -72,13 +71,14 @@ class Trainer(BaseTrainer):
         self.optimizer.step()
         return loss_val
 
-    def predict(self, batch, l_sample:int=10):
+    def predict(self, batch, l_sample: int=10):
         inputs, orig_idx, word_orig_idx, sentlens, wordlens = unpack_batch(batch, self.use_cuda)
         word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, next_word, prev_word = inputs
 
         self.model.eval()
         bs = word.size(0)
-        _, preds = self.model(word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained, lemma, next_word, prev_word, word_orig_idx, sentlens, wordlens)
+        _, preds = self.model(word, word_mask, wordchars, wordchars_mask, upos, xpos, ufeats, pretrained,
+                              lemma, next_word, prev_word, word_orig_idx, sentlens, wordlens)
         preds = preds[0].argmax(-1)  # use forward predictions only
         pred_tokens = []
         for i in range(bs):
