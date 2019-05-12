@@ -83,10 +83,9 @@ class LSTMBiLM(nn.Module):
             self.lstm_forward = HighwayLSTM(**rnn_params, highway_func=torch.tanh)
             self.lstm_backward = HighwayLSTM(**rnn_params, highway_func=torch.tanh)
         elif args['lstm_type'] == 'wdlstm':
-            self.lstm_forward = MultiLayerLSTM(**rnn_params,
-                                               output_size=(args['word_emb_dim'] if args['tie_softmax'] else args['hidden_dim']))
-            self.lstm_backward = MultiLayerLSTM(**rnn_params,
-                                                output_size=(args['word_emb_dim'] if args['tie_softmax'] else args['hidden_dim']))
+            out_dim = args['word_emb_dim'] if args['tie_softmax'] else args['hidden_dim']
+            self.lstm_forward = MultiLayerLSTM(**rnn_params, output_size=out_dim)
+            self.lstm_backward = MultiLayerLSTM(**rnn_params, output_size=out_dim)
         else:
             raise ValueError('LSTM type not supported')
 
