@@ -70,21 +70,23 @@ class LSTMBiLM(nn.Module):
             input_size += self.args['transformed_dim']
 
         # recurrent layers
+        rnn_params = {
+            'input_size': input_size,
+            'hidden_size': self.args['hidden_dim'],
+            'num_layers': self.args['num_layers'],
+            'batch_first': True,
+            'bidirectional': False,
+            'dropout': self.args['dropout'],
+            ('rec_dropout' if self.args['lstm_type'] == 'hlstm' else 'weight_dropout'): self.args['rec_dropout'],
+        }
         if args['lstm_type'] == 'hlstm':
-            self.lstm_forward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                            dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
-            self.lstm_backward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                             dropout=self.args['dropout'], rec_dropout=self.args['rec_dropout'], highway_func=torch.tanh)
+            self.lstm_forward = HighwayLSTM(**rnn_params, highway_func=torch.tanh)
+            self.lstm_backward = HighwayLSTM(**rnn_params, highway_func=torch.tanh)
         elif args['lstm_type'] == 'wdlstm':
-            self.lstm_forward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                               dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
-            self.lstm_backward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                                dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
-        elif args['lstm_type'] == 'awdlstm':
-            self.lstm_forward = MultiLayerLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
-                                               dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
-            self.lstm_backward = MultiLayerLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
-                                                dropout=self.args['dropout'], weight_dropout=self.args['rec_dropout'])
+            self.lstm_forward = MultiLayerLSTM(**rnn_params,
+                                               output_size=(args['word_emb_dim'] if args['tie_softmax'] else args['hidden_dim']))
+            self.lstm_backward = MultiLayerLSTM(**rnn_params,
+                                                output_size=(args['word_emb_dim'] if args['tie_softmax'] else args['hidden_dim']))
         else:
             raise ValueError('LSTM type not supported')
 
@@ -92,10 +94,9 @@ class LSTMBiLM(nn.Module):
         # self.parserlstm_h_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
         # self.parserlstm_c_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
 
-        if args['lstm_type'] == 'awdlstm':
+        if args['tie_softmax']:
             self.dec_forward = nn.Linear(self.args['word_emb_dim'], len(vocab['word']))
             self.dec_backward = nn.Linear(self.args['word_emb_dim'], len(vocab['word']))
-            print('sharing weight')
             self.dec_forward.weight = self.word_emb.weight
             self.dec_backward.weight = self.word_emb.weight
 
