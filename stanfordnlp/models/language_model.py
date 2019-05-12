@@ -68,7 +68,8 @@ def parse_args():
     parser.add_argument('--sample_train', type=float, default=1.0, help='Subsample training data.')
     parser.add_argument('--optim', type=str, default='adam', help='sgd, adagrad, adam or adamax.')
     parser.add_argument('--lr', type=float, default=3e-3, help='Learning rate')
-    parser.add_argument('--beta2', type=float, default=0.95)
+    parser.add_argument('--beta1', type=float, default=0.7)
+    parser.add_argument('--beta2', type=float, default=0.999)
 
     parser.add_argument('--max_steps', type=int, default=50000)
     parser.add_argument('--eval_interval', type=int, default=100)
@@ -134,7 +135,7 @@ def train(args):
         sys.exit(0)
 
     print("Training language model...")
-    trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'], weight_decay=args['wdecay'])
+    trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'])
 
     print()
     print('Parameters:')
