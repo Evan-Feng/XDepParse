@@ -92,6 +92,8 @@ class LSTMBiLM(nn.Module):
         self.drop_replacement = nn.Parameter(torch.randn(input_size) / np.sqrt(input_size))
 
         if args['tie_softmax']:
+            if self.args['lstm_type'] == 'hlstm' and self.args['hidden_dim'] != self.args['word_emb_dim']:
+                raise ValueError('If tie_softmax is true and HighwayLSTM is used, hidden_dim and word_emb_dim must be equal')
             self.dec_forward = nn.Linear(self.args['word_emb_dim'], len(vocab['word']))
             self.dec_backward = nn.Linear(self.args['word_emb_dim'], len(vocab['word']))
             self.dec_forward.weight = self.word_emb.weight
