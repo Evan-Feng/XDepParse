@@ -69,43 +69,31 @@ class Parser(nn.Module):
             input_size += self.args['transformed_dim']
 
         # recurrent layers
-        assert args['lstm_type'] in ('bihlstm', 'hlstm', 'wdlstm', 'awdlstm')
-
-        # if self.args['pretrain_lm'] is None or self.args['finetune']:
-        rnn_drop = args['dropout']
-        rnn_wdrop = args['rec_dropout']
-        # else:
-        #     rnn_drop = 0
-        #     rnn_wdrop = 0
-
+        rnn_params = {
+            'input_size': input_size,
+            'hidden_size': self.args['hidden_dim'],
+            'num_layers': self.args['num_layers'],
+            'batch_first': True,
+            'bidirectional': self.args['lstm_type'] == 'bihlstm',
+            'dropout': self.args['dropout'],
+            ('rec_dropout' if self.args['lstm_type'] in
+                ('hlstm', 'bihlstm') else 'weight_dropout'): self.args['rec_dropout'],
+        }
         if args['lstm_type'] == 'bihlstm':
-            self.parserlstm = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=True,
-                                          dropout=rnn_drop, rec_dropout=rnn_wdrop, highway_func=torch.tanh)
+            self.parserlstm = HighwayLSTM(**rnn_params, highway_func=torch.tanh)
             self.parserlstm_h_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
             self.parserlstm_c_init = nn.Parameter(torch.zeros(2 * self.args['num_layers'], 1, self.args['hidden_dim']))
         elif args['lstm_type'] == 'hlstm':
-            self.lstm_forward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                            dropout=rnn_drop, rec_dropout=rnn_wdrop, highway_func=torch.tanh)
-            self.lstm_backward = HighwayLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                             dropout=rnn_drop, rec_dropout=rnn_wdrop, highway_func=torch.tanh)
+            self.lstm_forward = HighwayLSTM(**rnn_params, highway_func=torch.tanh)
+            self.lstm_backward = HighwayLSTM(**rnn_params, highway_func=torch.tanh)
         elif args['lstm_type'] == 'wdlstm':
-            self.lstm_forward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                               dropout=rnn_drop, weight_dropout=rnn_wdrop)
-            self.lstm_backward = WeightDropLSTM(input_size, self.args['hidden_dim'], self.args['num_layers'], batch_first=True, bidirectional=False,
-                                                dropout=rnn_drop, weight_dropout=rnn_wdrop)
-        elif args['lstm_type'] == 'awdlstm':
-            self.lstm_forward = MultiLayerLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
-                                        dropout=rnn_drop, weight_dropout=rnn_wdrop)
-            self.lstm_backward = MultiLayerLSTM(input_size, self.args['hidden_dim'], self.args['word_emb_dim'], self.args['num_layers'],
-                                         dropout=rnn_drop, weight_dropout=rnn_wdrop)
+            self.lstm_forward = MultiLayerLSTM(**rnn_params, output_size=self.args['output_hidden_dim'])
+            self.lstm_backward = MultiLayerLSTM(**rnn_params, output_size=self.args['output_hidden_dim'])
 
         self.drop_replacement = nn.Parameter(torch.randn(input_size) / np.sqrt(input_size))
 
         # classifiers
-        if self.args['lstm_type'] == 'awdlstm':
-            hdim = self.args['word_emb_dim'] * 2
-        else:
-            hdim = self.args['hidden_dim'] * 2
+        hdim = self.args['output_hidden_dim'] * 2 if self.args['lstm_type'] == 'wdlstm' else self.args['hidden_dim'] * 2
 
         assert self.args['scorer'] in ('biaffine', 'mlp')
         if self.args['scorer'] == 'biaffine':
@@ -134,20 +122,14 @@ class Parser(nn.Module):
         if self.args['pretrain']:
             pretrained_emb = self.pretrained_emb(pretrained)
             pretrained_emb = self.trans_pretrained(pretrained_emb)
-            # pretrained_emb = pack(pretrained_emb)
             inputs += [pretrained_emb]
-
-        # def pad(x):
-        #    return pad_packed_sequence(PackedSequence(x, pretrained_emb.batch_sizes), batch_first=True)[0]
 
         if self.args['word_emb_dim'] > 0:
             word_emb = self.word_emb(word)
-            # word_emb = pack(word_emb)
             inputs += [word_emb]
 
         if self.args['lemma_emb_dim'] > 0:
             lemma_emb = self.lemma_emb(lemma)
-            # lemma_emb = pack(lemma_emb)
             inputs += [lemma_emb]
 
         if self.args['tag_emb_dim'] > 0:
@@ -158,57 +140,40 @@ class Parser(nn.Module):
                     pos_emb += self.xpos_emb[i](xpos[:, :, i])
             else:
                 pos_emb += self.xpos_emb(xpos)
-            # pos_emb = pack(pos_emb)
 
             feats_emb = 0
             for i in range(len(self.vocab['feats'])):
                 feats_emb += self.ufeats_emb[i](ufeats[:, :, i])
-            # feats_emb = pack(feats_emb)
 
             inputs += [pos_emb, feats_emb]
 
         if self.args['char'] and self.args['char_emb_dim'] > 0:
             char_reps = self.charmodel(wordchars, wordchars_mask, word_orig_idx, sentlens, wordlens)
-            # char_reps = PackedSequence(self.trans_char(self.drop(char_reps.data)), char_reps.batch_sizes)
             char_reps = self.trans_char(self.drop(char_reps.data))
             inputs += [char_reps]
 
-        # lstm_inputs = torch.cat([x.data for x in inputs], 1)
         lstm_inputs = torch.cat(inputs, -1)
-
-        if self.args['pretrain_lm'] is None or self.args['finetune']:
-            lstm_inputs = self.worddrop(lstm_inputs, self.drop_replacement)
-            lstm_inputs = self.drop(lstm_inputs)
-
+        lstm_inputs = self.worddrop(lstm_inputs, self.drop_replacement)
+        lstm_inputs = self.drop(lstm_inputs)
         rev_lstm_inputs = reverse_padded_sequence(lstm_inputs, sentlens, batch_first=True)
-
-        # lstm_inputs = PackedSequence(lstm_inputs, inputs[0].batch_sizes)
 
         if self.args['lstm_type'] == 'bihlstm':
             lstm_inputs = pack(lstm_inputs)
             lstm_outputs, _ = self.parserlstm(lstm_inputs, sentlens, hx=(self.parserlstm_h_init.expand(
-                2 * self.args['num_layers'], word.size(0), self.args['hidden_dim']).contiguous(), self.parserlstm_c_init.expand(2 * self.args['num_layers'], word.size(0), self.args['hidden_dim']).contiguous()))
+                2 * self.args['num_layers'], word.size(0), self.args['hidden_dim']).contiguous(),
+                self.parserlstm_c_init.expand(2 * self.args['num_layers'], word.size(0), self.args['hidden_dim']).contiguous()))
             lstm_outputs, _ = pad_packed_sequence(lstm_outputs, batch_first=True)
         elif self.args['lstm_type'] == 'hlstm':
             rev_lstm_inputs = pack(rev_lstm_inputs)
             hid_forward, _ = self.lstm_forward(lstm_inputs, sentlens)
             hid_backward, _ = self.lstm_backward(lstm_inputs, sentlens)
-            # hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
-            # hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
+            hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
+            hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
             hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
         elif self.args['lstm_type'] == 'wdlstm':
             hid_forward, _ = self.lstm_forward(lstm_inputs)
             hid_backward, _ = self.lstm_backward(rev_lstm_inputs)
-            # hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
-            # hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
-            hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
-            lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
-        elif self.args['lstm_type'] == 'awdlstm':
-            hid_forward, _ = self.lstm_forward(lstm_inputs)
-            hid_backward, _ = self.lstm_backward(rev_lstm_inputs)
-            # hid_forward, _ = pad_packed_sequence(hid_forward, batch_first=True)
-            # hid_backward, _ = pad_packed_sequence(hid_backward, batch_first=True)
             hid_backward = reverse_padded_sequence(hid_backward, sentlens, batch_first=True)
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
 
@@ -247,15 +212,12 @@ class Parser(nn.Module):
             # loss += self.crit(deprel_scores.contiguous(), deprel_target.view(-1))
 
             if self.args['linearization']:
-                #lin_scores = lin_scores[:, 1:].masked_select(goldmask)
                 lin_scores = torch.gather(lin_scores[:, 1:], 2, head.unsqueeze(2)).view(-1)
                 lin_scores = torch.cat([-lin_scores.unsqueeze(1) / 2, lin_scores.unsqueeze(1) / 2], 1)
-                #lin_target = (head_offset[:, 1:] > 0).long().masked_select(goldmask)
                 lin_target = torch.gather((head_offset[:, 1:] > 0).long(), 2, head.unsqueeze(2))
                 loss += self.crit(lin_scores.contiguous(), lin_target.view(-1))
 
             if self.args['distance']:
-                #dist_kld = dist_kld[:, 1:].masked_select(goldmask)
                 dist_kld = torch.gather(dist_kld[:, 1:], 2, head.unsqueeze(2))
                 loss -= dist_kld.sum()
 
