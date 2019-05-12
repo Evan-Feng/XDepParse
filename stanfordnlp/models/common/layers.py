@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.nn import Parameter
+import torch.nn.functional as F
 
 
 def _weight_drop(module, weights, dropout):
@@ -10,14 +10,15 @@ def _weight_drop(module, weights, dropout):
 
     for name_w in weights:
         w = getattr(module, name_w)
-        module.register_parameter(name_w + '_raw', Parameter(w))
+        module.register_parameter(name_w + '_raw', nn.Parameter(w.data))
+        module._parameters[name_w] = F.dropout(w, p=dropout, training=False)
 
     original_module_forward = module.forward
 
     def forward(*args, **kwargs):
         for name_w in weights:
             raw_w = getattr(module, name_w + '_raw')
-            module._parameters[name_w] = torch.nn.functional.dropout(raw_w, p=dropout, training=module.training)
+            module._parameters[name_w] = F.dropout(raw_w, p=dropout, training=module.training)
 
         return original_module_forward(*args)
 
