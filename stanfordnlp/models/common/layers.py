@@ -69,20 +69,21 @@ class MultiLayerLSTM(nn.Module):
     A multi-layer LSTM with specified output dimension.
     """
 
-    def __init__(self, in_dim, hid_dim, out_dim, n_layers, bidirectional=False, dropout=0, weight_dropout=0):
+    def __init__(self, input_size, hidden_size, output_size, num_layers,
+                 bidirectional=False, dropout=0, weight_dropout=0, batch_first=True):
         super().__init__()
-        self.n_layers = n_layers
-        self.rnns = [WeightDropLSTM(in_dim if l == 0 else hid_dim,
-                                    hid_dim if l != n_layers - 1 else out_dim,
+        self.num_layers = num_layers
+        self.rnns = [WeightDropLSTM(input_size if l == 0 else hidden_size,
+                                    hidden_size if l != num_layers - 1 else output_size,
                                     1, bidirectional=bidirectional,
-                                    batch_first=True, weight_dropout=weight_dropout) for l in range(n_layers)]
+                                    batch_first=batch_first, weight_dropout=weight_dropout) for l in range(num_layers)]
         self.rnns = nn.ModuleList(self.rnns)
-        self.hidden_dps = nn.ModuleList([RNNDropout(dropout) for l in range(n_layers)])
+        self.hidden_dps = nn.ModuleList([RNNDropout(dropout) for l in range(num_layers)])
 
     def forward(self, inputs):
         raw_output = inputs
         for l, (rnn, hid_dp) in enumerate(zip(self.rnns, self.hidden_dps)):
             raw_output, _ = rnn(raw_output)
-            if l != self.n_layers - 1:
+            if l != self.num_layers - 1:
                 raw_output = hid_dp(raw_output)
         return raw_output, None
