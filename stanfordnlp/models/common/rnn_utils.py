@@ -36,3 +36,19 @@ def reverse_padded_sequence(inputs, lengths, batch_first=False):
 def copy_rnn_weights(src_rnn, trg_rnn):
     for p_name, _ in src_rnn.named_parameters():
         getattr(trg_rnn, p_name).data = getattr(src_rnn, p_name).data
+
+
+if __name__ == '__main__':
+    x = torch.randn(100, 40, 200)
+    sentlens = torch.randint(0, 41, (100,))
+    rev_x = reverse_padded_sequence(x, sentlens, batch_first=True)
+    for xx, rev_xx, l in zip(x, rev_x, sentlens):
+        assert (xx[:l] == rev_xx[:l].flip([0])).all()
+
+    x = torch.randn(40, 100, 200)
+    sentlens = torch.randint(0, 41, (100,))
+    rev_x = reverse_padded_sequence(x, sentlens, batch_first=False)
+    for i, l in enumerate(sentlens):
+        assert (x[:l, i, :][:l] == rev_x[:l, i, :].flip([0])).all()
+
+    print('reverse_padded_sequence passed all tests')
