@@ -39,8 +39,9 @@ def parse_args():
     # parser.add_argument('--vocab_cutoff', type=int, default=7, help='Word frequency threshold for vocab construction')
     parser.add_argument('--lemma_emb_dim', type=int, default=75)
     parser.add_argument('--wdecay', type=float, default=1e-6, help='weight decay applied to all weights')
-    parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm', 'awdlstm'], help="LSTM type")
-    parser.add_argument('--balance', type=utils.bool_flag, default=True, help='balance data across multiple training files')
+    parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm'], help="LSTM type (highway lstm / weight drop lstm)")
+    parser.add_argument('--balance', type=utils.bool_flag, nargs='?', const=True,  default=True, help='balance data across multiple training files')
+    parser.add_argument('--tie_softmax', type=utils.bool_flag, nargs='?', const=True, default=True, help='use the word embedding matrix as softmax weights')
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
