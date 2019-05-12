@@ -32,8 +32,6 @@ def parse_args():
     parser.add_argument('--wordvec_dir', type=str, default='extern_data/word2vec', help='Directory of word vectors')
     parser.add_argument('--train_file', type=str, nargs='+', default=None, help='Input file for data loader.')
     parser.add_argument('--eval_file', type=str, nargs='+', default=None, help='Input file for data loader.')
-    # parser.add_argument('--output_file', type=str, default=None, help='Output CoNLL-U file.')
-    # parser.add_argument('--gold_file', type=str, default=None, help='Output CoNLL-U file.')
 
     # additional arguments
     parser.add_argument('--vocab_cutoff', type=int, default=10000, help='vocabulary size for each domain')
