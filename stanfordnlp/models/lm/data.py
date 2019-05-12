@@ -116,7 +116,7 @@ class DataLoader:
 
         # construct wordvocab from multiple files
         wordvocabs = [WordVocab(data, self.args['shorthand'], cutoff=0, lower=True) for data in data_list]
-        wordset = list(set(sum([v._id2unit[len(VOCAB_PREFIX):len(VOCAB_PREFIX) + 10000] for v in wordvocabs], [])))
+        wordset = list(set(sum([v._id2unit[len(VOCAB_PREFIX):len(VOCAB_PREFIX) + self.args['vocab_cutoff']] for v in wordvocabs], [])))
         wordvocab = wordvocabs[0]
         wordvocab._id2unit = VOCAB_PREFIX + wordset
         wordvocab._unit2id = {w: i for i, w in enumerate(wordvocab._id2unit)}

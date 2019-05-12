@@ -36,7 +36,7 @@ def parse_args():
     # parser.add_argument('--gold_file', type=str, default=None, help='Output CoNLL-U file.')
 
     # additional arguments
-    # parser.add_argument('--vocab_cutoff', type=int, default=7, help='Word frequency threshold for vocab construction')
+    parser.add_argument('--vocab_cutoff', type=int, default=10000, help='vocabulary size for each domain')
     parser.add_argument('--lemma_emb_dim', type=int, default=75)
     parser.add_argument('--wdecay', type=float, default=1e-6, help='weight decay applied to all weights')
     parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm'], help="LSTM type (highway lstm / weight drop lstm)")
