@@ -41,11 +41,12 @@ def parse_args():
     parser.add_argument('--vocab_cutoff', type=int, default=7, help='Word frequency threshold for vocab construction')
     parser.add_argument('--lemma_emb_dim', type=int, default=75)
     parser.add_argument('--wdecay', type=float, default=1e-6, help='weight decay applied to all weights')
-    parser.add_argument('--lstm_type', type=str, default='wdlstm', choices=['hlstm', 'wdlstm', 'bihlstm', 'awdlstm'], help="LSTM type")
+    parser.add_argument('--lstm_type', type=str, default='bihlstm', choices=['hlstm', 'wdlstm', 'bihlstm'], help="LSTM type")
     parser.add_argument('--pretrain_lm', type=str, default=None, help='dir of the pretrained lm (optional)')
     parser.add_argument('--finetune', action='store_true', help='finetune all pretrained parameters')
     parser.add_argument('--finetune_lr', type=float, default=0, help='finetune all pretrained parameters')
     parser.add_argument('--unfreeze_points', type=int, nargs='*', default=[])
+    parser.add_argument('--output_hidden_dim', type=int, default=400, help='number of hidden units of the top lstm layer (only valid when lstm_type == wdlstm)')
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
@@ -164,10 +165,13 @@ def train(args):
         trainer.init_from_lm(lm_model, freeze=(not args['finetune']))
 
     print()
-    print('Parameters that require grad:')
+    print('Parameters:')
+    n_param = 0
     for p_name, p in trainer.model.named_parameters():
         if p.requires_grad == True:
+            n_param += np.prod(list(p.size()))
             print('\t{:10}    {}'.format(p_name, p.size()))
+    print('\tTotal paramamters: {}'.format(n_param))
 
     global_step = 0
     max_steps = args['max_steps']
