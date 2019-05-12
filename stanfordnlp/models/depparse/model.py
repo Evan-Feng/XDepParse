@@ -98,10 +98,12 @@ class Parser(nn.Module):
         assert self.args['scorer'] in ('biaffine', 'mlp')
         if self.args['scorer'] == 'biaffine':
             self.unlabeled = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
-            self.deprel = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), pairwise=True, dropout=args['dropout'])
+            if self.args['deprel_loss']:
+                self.deprel = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), pairwise=True, dropout=args['dropout'])
         elif self.args['scorer'] == 'mlp':
             self.unlabeled = MLPScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], 1, 1, dropout=args['dropout'])
-            self.deprel = MLPScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), 1, dropout=args['dropout'])
+            if self.args['deprel_loss']:
+                self.deprel = MLPScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], len(vocab['deprel']), 1, dropout=args['dropout'])
 
         if args['linearization']:
             self.linearization = DeepBiaffineScorer(hdim, hdim, self.args['deep_biaff_hidden_dim'], 1, pairwise=True, dropout=args['dropout'])
@@ -178,7 +180,9 @@ class Parser(nn.Module):
             lstm_outputs = torch.cat([hid_forward, hid_backward], -1)
 
         unlabeled_scores = self.unlabeled(self.drop(lstm_outputs), self.drop(lstm_outputs)).squeeze(3)
-        # deprel_scores = self.deprel(self.drop(lstm_outputs), self.drop(lstm_outputs))
+
+        if self.args['deprel_loss']:
+            deprel_scores = self.deprel(self.drop(lstm_outputs), self.drop(lstm_outputs))
 
         if self.args['linearization'] or self.args['distance']:
             head_offset = torch.arange(word.size(1), device=head.device).view(1, 1, -1).expand(word.size(0), -1, -1) - \
@@ -206,10 +210,11 @@ class Parser(nn.Module):
             unlabeled_target = head.masked_fill(word_mask[:, 1:], -1)
             loss = self.crit(unlabeled_scores.contiguous().view(-1, unlabeled_scores.size(2)), unlabeled_target.view(-1))
 
-            # deprel_scores = deprel_scores[:, 1:]  # exclude attachment for the root symbol
-            # deprel_scores = torch.gather(deprel_scores, 2, head.unsqueeze(2).unsqueeze(3).expand(-1, -1, -1, len(self.vocab['deprel']))).view(-1, len(self.vocab['deprel']))
-            # deprel_target = deprel.masked_fill(word_mask[:, 1:], -1)
-            # loss += self.crit(deprel_scores.contiguous(), deprel_target.view(-1))
+            if self.args['deprel_loss']:
+                deprel_scores = deprel_scores[:, 1:]  # exclude attachment for the root symbol
+                deprel_scores = torch.gather(deprel_scores, 2, head.unsqueeze(2).unsqueeze(3).expand(-1, -1, -1, len(self.vocab['deprel']))).view(-1, len(self.vocab['deprel']))
+                deprel_target = deprel.masked_fill(word_mask[:, 1:], -1)
+                loss += self.crit(deprel_scores.contiguous(), deprel_target.view(-1))
 
             if self.args['linearization']:
                 lin_scores = torch.gather(lin_scores[:, 1:], 2, head.unsqueeze(2)).view(-1)
@@ -225,7 +230,9 @@ class Parser(nn.Module):
         else:
             loss = 0
             preds.append(F.log_softmax(unlabeled_scores, 2).detach().cpu().numpy())
-            # preds.append(deprel_scores.max(3)[1].detach().cpu().numpy())
-            preds.append(np.random.randn(*preds[0].shape, len(self.vocab['deprel'])).argmax(-1))
+            if self.args['deprel_loss']:
+                preds.append(deprel_scores.max(3)[1].detach().cpu().numpy())
+            else:
+                preds.append(np.random.randn(*preds[0].shape, len(self.vocab['deprel'])).argmax(-1))
 
         return loss, preds
