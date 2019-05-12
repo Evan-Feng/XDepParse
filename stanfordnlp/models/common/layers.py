@@ -87,10 +87,17 @@ class MultiLayerLSTM(nn.Module):
                 w = getattr(self.rnns[l], w_name.format(0))
                 setattr(self, w_name.format(l), w)
 
-    def forward(self, inputs):
-        raw_output = inputs
+    def forward(self, inputs, hx=None):
+        """
+        inputs: tensor of shape (batch_size, seq_len, input_size)
+        hx: List of List of tensors, each of shape (ndir, batch_size, hid_size)
+            len(hx) should be num_layers and len(hx[0]) should be 2
+        """
+        new_h = []
+        outputs = inputs
         for l, (rnn, hid_dp) in enumerate(zip(self.rnns, self.hidden_dps)):
-            raw_output, _ = rnn(raw_output)
+            outputs, hid = rnn(outputs, hx[l] if hx else None)
+            new_h.append(hid)
             if l != self.num_layers - 1:
-                raw_output = hid_dp(raw_output)
-        return raw_output, None
+                outputs = hid_dp(outputs)
+        return outputs, new_h
