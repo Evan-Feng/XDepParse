@@ -47,6 +47,7 @@ def parse_args():
     parser.add_argument('--finetune_lr', type=float, default=0, help='finetune all pretrained parameters')
     parser.add_argument('--unfreeze_points', type=int, nargs='*', default=[])
     parser.add_argument('--output_hidden_dim', type=int, default=400, help='number of hidden units of the top lstm layer (only valid when lstm_type == wdlstm)')
+    parser.add_argument('--deprel_loss', type=utils.bool_flag, nargs='?', const=True, default=True, help='optimize relation label loss')
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
