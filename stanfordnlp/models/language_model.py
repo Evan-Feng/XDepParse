@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument('--wordvec_dir', type=str, default='extern_data/word2vec', help='Directory of word vectors')
     parser.add_argument('--train_file', type=str, nargs='+', default=None, help='Input file for data loader.')
     parser.add_argument('--eval_file', type=str, nargs='+', default=None, help='Input file for data loader.')
+    parser.add_argument('--output_file', type=str, default=None, help='Output file for test data prediction.')
 
     # additional arguments
     parser.add_argument('--vocab_cutoff', type=int, default=10000, help='vocabulary size for each domain')
@@ -137,21 +138,21 @@ def train(args):
 
     print()
     print('Parameters:')
+    n_param = 0
     for p_name, p in trainer.model.named_parameters():
         if p.requires_grad == True:
+            n_param += np.prod(list(p.size()))
             print('\t{:10}    {}'.format(p_name, p.size()))
+    print('\tTotal paramamters: {}'.format(n_param))
 
     global_step = 0
     max_steps = args['max_steps']
     dev_score_history = []
-    # best_dev_preds = []
     current_lr = args['lr']
     global_start_time = time.time()
     format_str = '{}: step {}/{}, loss = {:.6f} ({:.3f} sec/batch), ppl = {:.6f}, lr: {:.6f}'
 
-    using_amsgrad = False
     last_best_step = 0
-    # start training
     log_loss = 0
     train_loss = 0
     while True:
@@ -187,17 +188,11 @@ def train(args):
                     trainer.save(model_file)
                     print("new best model saved.")
                 dev_score_history.append(dev_loss)
-                print("")
+                print()
 
             if global_step - last_best_step >= args['max_steps_before_stop']:
-                if not using_amsgrad:
-                    print("Switching to AMSGrad")
-                    last_best_step = global_step
-                    using_amsgrad = True
-                    trainer.optimizer = optim.Adam(trainer.model.parameters(), amsgrad=True, lr=args['lr'], betas=(.9, args['beta2']), eps=1e-6)
-                else:
-                    do_break = True
-                    break
+                do_break = True
+                break
 
             if global_step >= args['max_steps']:
                 do_break = True
@@ -233,19 +228,19 @@ def evaluate(args):
             loaded_args[k] = args[k]
 
     # load data
-    print("Loading data with batch size {}...".format(args['batch_size']))
-    batch = DataLoader(args['eval_file'], args['batch_size'], loaded_args, pretrain, vocab=vocab, evaluation=True)
+    print("Loading data with batch size {}...".format(args['eval_batch_size']))
+    batch = DataLoader(args['eval_file'], args['eval_batch_size'], loaded_args, pretrain, vocab=vocab, evaluation=True)
 
-    if len(batch) > 0:
-        print("Start evaluation...")
+    loss = sum([trainer.update(b, eval=True) for b in batch]) / len(batch)
+    print('Test ppl = {:.6f}'.format(np.exp(loss)))
+
+    if args['output_file'] is not None:
         preds = []
-        for i, b in enumerate(batch):
+        for b in batch:
             preds += trainer.predict(b)
-    else:
-        preds = []
-
-    for sent in preds:
-        print(' '.join([vocab['word'].id2unit(wid) for wid in sent]))
+        with open(args['output_file'], 'w') as fout:
+            for sent in preds:
+                fout.write(' '.join([vocab['word'].id2unit(wid) for wid in sent]) + '\n')
 
 if __name__ == '__main__':
     main()
