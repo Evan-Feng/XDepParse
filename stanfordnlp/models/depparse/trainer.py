@@ -100,7 +100,7 @@ class Trainer(BaseTrainer):
         """
         for m in m_names:
             if hasattr(self.model, m):
-                print('Initilizing {} from pretrained lm'.format(m))
+                print('Initilizing {}'.format(m))
                 if not hasattr(lm_model, m):
                     raise ValueError('pretrained language model does not have attribute {}'.format(m))
                 module = getattr(self.model, m)
@@ -108,7 +108,7 @@ class Trainer(BaseTrainer):
                 if freeze:
                     freeze_net(module)
             else:
-                print('Module not found, skipping {}'.format(m))
+                print('Skipping {}'.format(m))
 
         self.parameters = [p for p in self.model.parameters() if p.requires_grad]
         self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
