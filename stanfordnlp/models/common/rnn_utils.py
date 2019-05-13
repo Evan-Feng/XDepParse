@@ -34,8 +34,9 @@ def reverse_padded_sequence(inputs, lengths, batch_first=False):
 
 
 def copy_weights(src_module, trg_module):
-    for p_name, _ in src_module.named_parameters():
-        getattr(trg_module, p_name).data = getattr(src_module, p_name).data
+    trg_params = dict(trg_module.named_parameters())
+    for p_name, p in src_module.named_parameters():
+        trg_params[p_name].data.copy_(p.data)
 
 
 def freeze_net(module):
