@@ -43,8 +43,6 @@ def parse_args():
     parser.add_argument('--wdecay', type=float, default=1e-6, help='weight decay applied to all weights')
     parser.add_argument('--lstm_type', type=str, default='bihlstm', choices=['hlstm', 'wdlstm', 'bihlstm'], help="LSTM type")
     parser.add_argument('--pretrain_lm', type=str, default=None, help='dir of the pretrained lm (optional)')
-    parser.add_argument('--finetune', action='store_true', help='finetune all pretrained parameters')
-    parser.add_argument('--finetune_lr', type=float, default=0, help='finetune all pretrained parameters')
     parser.add_argument('--unfreeze_points', type=int, nargs='*', default=[])
     parser.add_argument('--output_hidden_dim', type=int, default=400, help='number of hidden units of the top lstm layer (only valid when lstm_type == wdlstm)')
     parser.add_argument('--deprel_loss', type=utils.bool_flag, nargs='?', const=True, default=True, help='optimize relation label loss')
