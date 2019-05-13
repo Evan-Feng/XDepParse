@@ -11,7 +11,7 @@ from stanfordnlp.models.common import utils, loss
 from stanfordnlp.models.common.chuliu_edmonds import chuliu_edmonds_one_root
 from stanfordnlp.models.depparse.model import Parser
 from stanfordnlp.models.pos.vocab import MultiVocab
-from stanfordnlp.models.common.rnn_utils import copy_rnn_weights
+from stanfordnlp.models.common.rnn_utils import copy_weights, freeze_net
 
 
 def unpack_batch(batch, use_cuda):
@@ -46,12 +46,10 @@ class Trainer(BaseTrainer):
             self.model.cuda()
         else:
             self.model.cpu()
-        # self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
-        #                                      betas=(0.9, self.args['beta2']), eps=1e-6, weight_decay=weight_decay)
-        if self.args['optim'] == 'adam':
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args['lr'], weight_decay=self.args['wdecay'])
-        else:
-            raise NotImplementedError()
+
+        self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
+                                             betas=(self.args['beta1'], self.args['beta2']),
+                                             weight_decay=self.args['wdecay'])
 
     def update(self, batch, eval=False):
         inputs, orig_idx, word_orig_idx, sentlens, wordlens = unpack_batch(batch, self.use_cuda)
@@ -87,69 +85,35 @@ class Trainer(BaseTrainer):
             pred_tokens = utils.unsort(pred_tokens, orig_idx)
         return pred_tokens
 
-    def init_from_lm(self, lm_model, freeze: bool=False):
-        def freeze_net(net):
-            for p in net.parameters():
-                p.requires_grad = False
+    def init_from_lm(self, lm_model, freeze: bool=True,
+                     m_names=['word_emb', 'lemma_emb', 'upos_emb', 'xpos_emb',
+                              'ufeats_emb', 'charmodel', 'trans_char', 'trans_char',
+                              'trans_pretrained', 'lstm_forward', 'lstm_backward']):
+        """
+        Initialize the paramters from a pretrained langauge model.
 
-        param_list = ['word_emb', 'lemma_emb', 'upos_emb', 'xpos_emb',
-                      'ufeats_emb', 'charmodel', 'trans_char', 'trans_char',
-                      'trans_pretrained']
-        lstm_params = ['parserlstm', 'lstm_forward', 'lstm_backward']
-        finetune_params = []
-
-        for p_name in param_list:
-            if hasattr(self.model, p_name):
-                print('Initilizing {} from pretrained lm'.format(p_name))
-                if not hasattr(lm_model, p_name):
-                    raise ValueError('lm model does not have attribute {}'.format(p_name))
-                module = getattr(lm_model, p_name)
-                setattr(self.model, p_name, module)
+        lm_model: LSTMBiLM object
+        freeze: bool (optional)
+            if True, the initialized paramters are freezed and will be from the optimizer's param group
+        m_names: List[str] (optional)
+            a list of module names to initialize
+        """
+        for m in m_names:
+            if hasattr(self.model, m):
+                print('Initilizing {} from pretrained lm'.format(m))
+                if not hasattr(lm_model, m):
+                    raise ValueError('pretrained language model does not have attribute {}'.format(m))
+                module = getattr(self.model, m)
+                copy_weights(getattr(lm_model, m), module)
                 if freeze:
                     freeze_net(module)
-                finetune_params += list(module.parameters())
             else:
-                print('Module not found, skipping {}'.format(p_name))
+                print('Module not found, skipping {}'.format(m))
 
-        for p_name in lstm_params:
-            if hasattr(self.model, p_name):
-                print('Initilizing {} from pretrained lm'.format(p_name))
-                if not hasattr(lm_model, p_name):
-                    raise ValueError('lm model does not have attribute {}'.format(p_name))
-                if self.args['lstm_type'] == 'awdlstm':
-                    for i, rnn in enumerate(getattr(lm_model, p_name).rnns):
-                        copy_rnn_weights(rnn, getattr(self.model, p_name).rnns[i])
-                else:
-                    copy_rnn_weights(getattr(lm_model, p_name), getattr(self.model, p_name))
-                if freeze:
-                    freeze_net(getattr(self.model, p_name))
-                finetune_params += list(getattr(self.model, p_name).parameters())
-            else:
-                print('Module not found, skipping {}'.format(p_name))
-
-        if not freeze:
-            print('############ TEST ############')
-            for p in finetune_params:
-                p.requires_grad = False
-            finetune_params = []
-            for p_name in ['weight_hh_l2', 'weight_hh_l2_raw', 'weight_ih_l2', 'bias_hh_l2', 'bias_ih_l2']:
-                getattr(self.model.lstm_forward, p_name).requires_grad = True
-                getattr(self.model.lstm_backward, p_name).requires_grad = True
-                finetune_params.append(getattr(self.model.lstm_forward, p_name))
-                finetune_params.append(getattr(self.model.lstm_backward, p_name))
-            if self.args['optim'] == 'adam':
-                self.optimizer = torch.optim.Adam([
-                    {'params': finetune_params, 'lr': self.args['finetune_lr']},
-                ], lr=self.args['lr'], weight_decay=self.args['wdecay'])
-            else:
-                raise NotImplementedError()
-            print('############ TEST ############')
-        else:
-            if self.args['optim'] == 'adam':
-                self.optimizer = torch.optim.Adam([p for p in self.model.parameters() if p.requires_grad],
-                                                  lr=self.args['lr'], weight_decay=self.args['wdecay'])
-            else:
-                raise NotImplementedError()
+        self.parameters = [p for p in self.model.parameters() if p.requires_grad]
+        self.optimizer = utils.get_optimizer(self.args['optim'], self.parameters, self.args['lr'],
+                                             betas=(self.args['beta1'], self.args['beta2']),
+                                             weight_decay=self.args['wdecay'])
 
     def unfreeze(self, layer_id, lr):
         finetune_params = []
