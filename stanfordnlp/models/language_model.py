@@ -73,7 +73,7 @@ def parse_args():
 
     parser.add_argument('--max_steps', type=int, default=50000)
     parser.add_argument('--eval_interval', type=int, default=100)
-    parser.add_argument('--max_steps_before_stop', type=int, default=3000)
+    parser.add_argument('--max_steps_before_stop', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=5000)
     parser.add_argument('--eval_batch_size', type=int, default=2000)
     parser.add_argument('--max_grad_norm', type=float, default=1.0, help='Gradient clipping.')
