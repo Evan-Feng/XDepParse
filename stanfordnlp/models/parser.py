@@ -162,7 +162,7 @@ def train(args):
     print("Training parser...")
     trainer = Trainer(args=args, vocab=vocab, pretrain=pretrain, use_cuda=args['cuda'], weight_decay=args['wdecay'])
     if args['pretrain_lm'] is not None:
-        trainer.init_from_lm(lm_model, freeze=(not args['finetune']))
+        trainer.init_from_lm(lm_model, freeze=True)
 
     print()
     print('Parameters:')
