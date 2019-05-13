@@ -116,32 +116,51 @@ class Trainer(BaseTrainer):
                                              weight_decay=self.args['wdecay'])
 
     def unfreeze(self, layer_id, lr):
-        finetune_params = []
+        """
+        Unfreeze a LSTM layer or the input layer
 
-        if self.args['lstm_type'] == 'awdlstm':
-            p_names = ['weight_hh_l0', 'weight_hh_l0_raw', 'weight_ih_l0', 'bias_hh_l0', 'bias_ih_l0']
-            for p_name in p_names:
-                getattr(self.model.lstm_forward.rnns[layer_id], p_name).requires_grad = True
-                getattr(self.model.lstm_backward.rnns[layer_id], p_name).requires_grad = True
-                finetune_params.append(getattr(self.model.lstm_forward.rnns[layer_id], p_name))
-                finetune_params.append(getattr(self.model.lstm_backward.rnns[layer_id], p_name))
+        layer_id: int
+            if layer_id >= 0, unfreeze the corresponding LSTM layer otherwise unfreeze the input layer
+        lr: float
+            the learning rate to use for the unfrozen parameters
+        """
+        if layer_id < -1:
+            raise ValueError('Invalid layer_id')
 
+        uf_params = []
+        uf_pnames = []
+
+        if layer_id >= 0:
+            p_names = [s.format(layer_id) for s in ['lstm_forward.weight_hh_l{}', 'lstm_forward.weight_hh_l{}_raw',
+                                                    'lstm_forward.weight_ih_l{}', 'lstm_forward.bias_hh_l{}',
+                                                    'lstm_forward.bias_ih_l{}',
+                                                    'lstm_backward.weight_hh_l{}', 'lstm_backward.weight_hh_l{}_raw',
+                                                    'lstm_backward.weight_ih_l{}', 'lstm_backward.bias_hh_l{}',
+                                                    'lstm_backward.bias_ih_l{}']]
+            for p_name, p in self.model.named_parameters():
+                if p_name in p_names:
+                    p.requires_grad = True
+                    uf_params.append(p)
+                    uf_pnames.append(p_name)
         else:
-            p_names = [s.format(layer_id) for s in ['weight_hh_l{}', 'weight_hh_l{}_raw', 'weight_ih_l{}', 'bias_hh_l{}', 'bias_ih_l{}']]
-            for p_name in p_names:
-                getattr(self.model.lstm_forward, p_name).requires_grad = True
-                getattr(self.model.lstm_backward, p_name).requires_grad = True
-                finetune_params.append(getattr(self.model.lstm_forward, p_name))
-                finetune_params.append(getattr(self.model.lstm_backward, p_name))
-        # print(self.optimizer.param_groups)
+            m_names = ['word_emb', 'lemma_emb', 'upos_emb', 'xpos_emb',
+                       'ufeats_emb', 'charmodel', 'trans_char', 'trans_char',
+                       'trans_pretrained']
+            for m_name in m_names:
+                if hasattr(self.model, m_name):
+                    module = getattr(self.model, m_name)
+                    for p_name, p in module.named_parameters():
+                        p.requires_grad = True
+                        uf_params.append(p)
+                        uf_pnames.append(m_name + '.' + p_name)
+
         print()
-        print('Adding params {} with lr {}'.format(p_names, lr))
+        print('Adding params {} with lr {}'.format(uf_pnames, lr))
         print()
         self.optimizer.add_param_group({
-            'params': finetune_params,
+            'params': uf_params,
             'lr': lr,
         })
-        # print(self.optimizer.param_groups)
 
     def save(self, filename, skip_modules=True):
         model_state = self.model.state_dict()
