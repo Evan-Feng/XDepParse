@@ -46,6 +46,7 @@ def parse_args():
     parser.add_argument('--unfreeze_points', type=int, nargs='*', default=[])
     parser.add_argument('--output_hidden_dim', type=int, default=400, help='number of hidden units of the top lstm layer (only valid when lstm_type == wdlstm)')
     parser.add_argument('--deprel_loss', type=utils.bool_flag, nargs='?', const=True, default=True, help='optimize relation label loss')
+    parser.add_argument('--lr_shrink', type=float, default=(1 / 2.6), help='lr shrink ratio when finetuning lower layers')
 
     parser.add_argument('--mode', default='train', choices=['train', 'predict'])
     parser.add_argument('--lang', type=str, help='Language')
@@ -190,7 +191,7 @@ def train(args):
         do_break = False
         for i, batch in enumerate(train_batch):
             while unfreeze_p < len(args['unfreeze_points']) and global_step == args['unfreeze_points'][unfreeze_p]:
-                trainer.unfreeze(args['num_layers'] - 1 - unfreeze_p, args['lr'] * (1 / 2.6)**(unfreeze_p + 1))
+                trainer.unfreeze(args['num_layers'] - 1 - unfreeze_p, args['lr'] * args['lr_shrink']**(unfreeze_p + 1))
                 unfreeze_p += 1
 
             start_time = time.time()
