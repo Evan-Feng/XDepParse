@@ -31,7 +31,7 @@ def get_wordvec_file(wordvec_dir, shorthand):
     lcode, tcode = shorthand.split('_')
     lang = lcode2lang[lcode] if lcode != 'no' else lcode2lang[shorthand]
     if lcode == 'zh':
-        lang = 'ChineseT'
+        lang = 'Chinese'
     return os.path.join(wordvec_dir, lang, '{}.vectors.xz'.format(
         lcode if lcode != 'no' else (shorthand if shorthand != 'no_nynorsklia' else 'no_nynorsk')))
 
