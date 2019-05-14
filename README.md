@@ -76,7 +76,7 @@ bash scripts/run_dp.sh --pretrain_lm save_models/lm2/ --save_dir save_models/dp2
 
 During finetuning, the pretrained parameters are frozen at first and only the dependency scorer is trained. After the model has converged, all the parameters are jointly finetuned. For more details about the finetuning procedure, please refer to the paper [ULMFiT](<https://www.aclweb.org/anthology/P18-1031>).
 
-## Reference
+## References
 
 [1] Qi, Peng, et al. [Universal Dependency Parsing from Scratch.](<https://www.aclweb.org/anthology/K18-2#page=168>) *CoNLL 2018* (2018): 160.
 
