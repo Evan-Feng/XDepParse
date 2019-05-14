@@ -69,7 +69,7 @@ def parse_args():
     parser.add_argument('--beta1', type=float, default=0.7)
     parser.add_argument('--beta2', type=float, default=0.999)
 
-    parser.add_argument('--max_steps', type=int, default=50000)
+    parser.add_argument('--max_steps', type=int, default=100000)
     parser.add_argument('--eval_interval', type=int, default=100)
     parser.add_argument('--max_steps_before_stop', type=int, default=10000)
     parser.add_argument('--batch_size', type=int, default=5000)
