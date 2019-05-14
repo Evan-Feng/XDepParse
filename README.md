@@ -54,7 +54,7 @@ Pretrain a cross-domain LSTM language model using the unlabeled data and save it
 bash scripts/run_lm.sh --save_dir save_model/lm1/
 ```
 
-The language model architecture we use is [AWD-LSTM](<https://openreview.net/forum?id=SyyGPP0TZ¬eId=SyyGPP0TZ>), which is a three-layer LSTM language model with weight dropout. By default the number of hidden units is 1150 and weight-tying is used, to change the hidden dimensionality and disable weight-tying, you can run the following command:
+The language model architecture we use is [AWD-LSTM](<https://openreview.net/forum?id=SyyGPP0TZ¬eId=SyyGPP0TZ>), which is a three-layer LSTM language model with weight dropout. By default the number of hidden units is 800 and weight-tying is used, to change the hidden dimensionality and disable weight-tying, you can run the following command:
 
 ```bash
 bash scripts/run_lm.sh --save_dir save_model/lm2/ --hidden_dim 400 --tie_softmax 0
