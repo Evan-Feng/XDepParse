@@ -32,7 +32,7 @@ The source domain unlabeled data is sampled from the newswire domain of [Chinese
 
 ### Download Word Vectors
 
-Run the following script to download word vectors and place them under the specified directory:
+Run the following commands to download word vectors and place them under the specified directory:
 
 ```bash
 git clone https://github.com/Evan-Feng/XDepParse.git
@@ -40,7 +40,7 @@ cd XDepParse
 bash scripts/download_vectors.sh extern_data/word2vec/
 ```
 
-Alternatively, you can download only the Chinese word vectors:
+Alternatively, you can download the Chinese word vectors only:
 
 ```bash
 bash scripts/download_zh_vec.sh extern_data/word2vec/
