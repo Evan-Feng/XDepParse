@@ -3,7 +3,7 @@
 [![Travis Status](https://travis-ci.com/stanfordnlp/stanfordnlp.svg?token=RPNzRzNDQRoq2x3J2juj&branch=master)](https://travis-ci.com/stanfordnlp/stanfordnlp)
 [![PyPI version](https://img.shields.io/pypi/v/stanfordnlp.svg?colorB=blue)](https://pypi.org/project/stanfordnlp/)
 
-## Dependencies
+## Requirements
 - Python >= 3.6
 - PyTorch 1.1
 
@@ -75,6 +75,10 @@ bash scripts/run_dp.sh --pretrain_lm save_models/lm2/ --save_dir save_models/dp2
 ```
 
 During finetuning, the pretrained parameters are frozen at first and only the dependency scorer is trained. After the model has converged, all the parameters are jointly finetuned. For more details about the finetuning procedure, please refer to the paper [ULMFiT](<https://www.aclweb.org/anthology/P18-1031>).
+
+## Todo
+
+- Back Propagation Through Time (BPTT) for language model training (currently the LM is trained at sentence level).
 
 ## References
 
