@@ -16,6 +16,7 @@ from stanfordnlp.models.common.layers import MultiLayerLSTM
 
 
 class LSTMBiLM(nn.Module):
+    init_range = 0.1
 
     def __init__(self, args, vocab, emb_matrix=None, share_hid=False):
         super().__init__()
@@ -34,27 +35,33 @@ class LSTMBiLM(nn.Module):
         if self.args['word_emb_dim'] > 0:
             # frequent word embeddings
             self.word_emb = nn.Embedding(len(vocab['word']), self.args['word_emb_dim'], padding_idx=0)
+            self.word_emb.weight.data.uniform_(-self.init_range, self.init_range)
             input_size += self.args['word_emb_dim']
 
         if self.args['lemma_emb_dim'] > 0:
             self.lemma_emb = nn.Embedding(len(vocab['lemma']), self.args['lemma_emb_dim'], padding_idx=0)
+            self.lemma_emb.weight.data.uniform_(-self.init_range, self.init_range)
             input_size += self.args['lemma_emb_dim']
 
         if self.args['tag_emb_dim'] > 0:
             self.upos_emb = nn.Embedding(len(vocab['upos']), self.args['tag_emb_dim'], padding_idx=0)
+            self.upos_emb.weight.data.uniform_(-self.init_range, self.init_range)
 
             if not isinstance(vocab['xpos'], CompositeVocab):
                 self.xpos_emb = nn.Embedding(len(vocab['xpos']), self.args['tag_emb_dim'], padding_idx=0)
+                self.xpos_emb.weight.data.uniform_(-self.init_range, self.init_range)
             else:
                 self.xpos_emb = nn.ModuleList()
 
                 for l in vocab['xpos'].lens():
                     self.xpos_emb.append(nn.Embedding(l, self.args['tag_emb_dim'], padding_idx=0))
+                    self.xpos_emb[-1].weight.data.uniform_(-self.init_range, self.init_range)
 
             self.ufeats_emb = nn.ModuleList()
 
             for l in vocab['feats'].lens():
                 self.ufeats_emb.append(nn.Embedding(l, self.args['tag_emb_dim'], padding_idx=0))
+                self.ufeats_emb[-1].weight.data.uniform_(-self.init_range, self.init_range)
 
             input_size += self.args['tag_emb_dim'] * 2
 
